@@ -7,7 +7,7 @@
 
 #define BUFLEN 44
 #define NPACK 10
-#define PORT 9930
+#define PORT 1883
 
 void diep(char *s)
 {
