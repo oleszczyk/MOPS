@@ -18,6 +18,12 @@ typedef struct FixedHeader{
 	uint8_t RemainingLengthLSB;
 }FixedHeader;
 
+typedef struct DummyStruct{
+	uint8_t MSB_PacketIdentifier;
+	uint8_t LSB_PacketIdentifier;
+}DummyStruct;
+
+
 // **** Connection structures **** //
 typedef struct ProtocolName{
 	uint8_t MSB_Length; // = 0
@@ -54,19 +60,18 @@ typedef struct PublishVariableHeader{
 	uint8_t LSB_PacketIdentifier;
 }PublishVariableHeader;
 
-typedef struct PubACKVariableHeader{
-	uint8_t MSB_PacketIdentifier;
-	uint8_t LSB_PacketIdentifier;
-}PubACKVariableHeader;
+typedef DummyStruct PubACKVariableHeader;
+typedef DummyStruct PubCompVariableHeader;
+typedef DummyStruct PubRelVariableHeader;
+typedef DummyStruct PubRecVariableHeader;
 // ***** Publish structures ***** //
 
 
 // **** Subscribe structures **** //
-typedef struct SubscribeVariableHeader{
-	uint8_t MSB_PacketIdentifier;
-	uint8_t LSB_PacketIdentifier;
-}SubscribeVariableHeader;
+typedef DummyStruct SubscribeVariableHeader;
+typedef DummyStruct UnSubscribeVariableHeader;
 // **** Subscribe structures **** //
+
 
 enum MESSAGE_TYPE{
 	CONNECT = 1,	// done
@@ -78,7 +83,7 @@ enum MESSAGE_TYPE{
 	PUBCOMP,		// done
 	SUBSCRIBE,		// done
 	SUBACK,			// done
-	UNSUBSCRIBE,
+	UNSUBSCRIBE,	// done
 	UNSUBACK,		// done
 	PINGREQ,
 	PINGRESP,
@@ -97,9 +102,10 @@ enum CONNACK_RETURN_CODE{
 //Definitions for general purposes
 void Init_FixedHeader(FixedHeader *FHeader, uint8_t MessageType, uint8_t Flags);
 void u16ToMSBandLSB(uint16_t u16, uint8_t *MSB, uint8_t *LSB);
+uint16_t ACKSimpleFunctionTemplate(uint8_t MessageType, uint8_t *Buffer, int BufferLen, uint16_t packetID);
+uint16_t VerySimpleBuildingTemplate(uint8_t MessageType, uint8_t *Buffer, int BufferLen);
 
-
-//Definitions for CONNECK packet
+//Definitions for CONNECT packet
 void Init_ProtocolName(ProtocolName *PName);
 void Init_ConnectVariableHeader(ConnectVariableHeader *CVHeader, uint8_t Flags, uint16_t KeepAlive);
 uint16_t BuildConnectMessage(uint8_t *Message, int MessageLen, uint16_t KeepAlive);
@@ -118,6 +124,11 @@ uint16_t BuildPubCompMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID);
 uint16_t BuildSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, uint8_t *QoS, uint8_t TopicNo, uint16_t *packetID);
 uint16_t BuildSubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID, uint8_t *QoSReturnCode, uint8_t TopicNo);
 uint16_t BuildUnSubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID);
+uint16_t BuildUnSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, uint8_t TopicNo, uint16_t *packetID);
 
+//Definitions for other packets
+uint16_t BuildPingReq(uint8_t *Buffer, int BufferLen);
+uint16_t BuildPingResp(uint8_t *Buffer, int BufferLen);
+uint16_t BuildDisconnect(uint8_t *Buffer, int BufferLen);
 
 #endif /* MQTT_H_ */

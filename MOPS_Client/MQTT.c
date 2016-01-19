@@ -198,119 +198,19 @@ uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topi
 }
 
 uint16_t BuildPubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
-	FixedHeader FHeader;
-	PubACKVariableHeader PACKHeader;
-	uint8_t MSB_temp, LSB_temp;
-	int tempLen = 0, index = 0;
-
-	//Check if all data can be stored in Message buffer
-	tempLen = sizeof(FHeader) + sizeof(PACKHeader);
-	if (tempLen > BufferLen)
-		return 0;
-	tempLen = 0;
-	//**************************************************
-
-	Init_FixedHeader(&FHeader, PUBACK, 0);
-	FHeader.RemainingLengthMSB = 0;
-	FHeader.RemainingLengthLSB = 2;
-
-	u16ToMSBandLSB(packetID, &MSB_temp, &LSB_temp);
-	PACKHeader.MSB_PacketIdentifier = MSB_temp;
-	PACKHeader.LSB_PacketIdentifier = LSB_temp;
-
-	memcpy(Buffer, &FHeader, sizeof(FHeader));
-	index = sizeof(FHeader);
-	memcpy(Buffer+index, &PACKHeader, sizeof(PACKHeader));
-	index += sizeof(PACKHeader);
-
-	return (uint16_t) index;
+	return ACKSimpleFunctionTemplate(PUBACK, Buffer, BufferLen, packetID);
 }
 
 uint16_t BuildPubRecMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
-	FixedHeader FHeader;
-	PubACKVariableHeader PACKHeader;
-	uint8_t MSB_temp, LSB_temp;
-	int tempLen = 0, index = 0;
-
-	//Check if all data can be stored in Message buffer
-	tempLen = sizeof(FHeader) + sizeof(PACKHeader);
-	if (tempLen > BufferLen)
-		return 0;
-	tempLen = 0;
-	//**************************************************
-
-	Init_FixedHeader(&FHeader, PUBREC, 0);
-	FHeader.RemainingLengthMSB = 0;
-	FHeader.RemainingLengthLSB = 2;
-
-	u16ToMSBandLSB(packetID, &MSB_temp, &LSB_temp);
-	PACKHeader.MSB_PacketIdentifier = MSB_temp;
-	PACKHeader.LSB_PacketIdentifier = LSB_temp;
-
-	memcpy(Buffer, &FHeader, sizeof(FHeader));
-	index = sizeof(FHeader);
-	memcpy(Buffer+index, &PACKHeader, sizeof(PACKHeader));
-	index += sizeof(PACKHeader);
-
-	return (uint16_t) index;
+	return ACKSimpleFunctionTemplate(PUBREC, Buffer, BufferLen, packetID);
 }
 
 uint16_t BuildPubRelMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
-	FixedHeader FHeader;
-	PubACKVariableHeader PACKHeader;
-	uint8_t MSB_temp, LSB_temp;
-	int tempLen = 0, index = 0;
-
-	//Check if all data can be stored in Message buffer
-	tempLen = sizeof(FHeader) + sizeof(PACKHeader);
-	if (tempLen > BufferLen)
-		return 0;
-	tempLen = 0;
-	//**************************************************
-
-	Init_FixedHeader(&FHeader, PUBREL, 0);
-	FHeader.RemainingLengthMSB = 0;
-	FHeader.RemainingLengthLSB = 2;
-
-	u16ToMSBandLSB(packetID, &MSB_temp, &LSB_temp);
-	PACKHeader.MSB_PacketIdentifier = MSB_temp;
-	PACKHeader.LSB_PacketIdentifier = LSB_temp;
-
-	memcpy(Buffer, &FHeader, sizeof(FHeader));
-	index = sizeof(FHeader);
-	memcpy(Buffer+index, &PACKHeader, sizeof(PACKHeader));
-	index += sizeof(PACKHeader);
-
-	return (uint16_t) index;
+	return ACKSimpleFunctionTemplate(PUBREL, Buffer, BufferLen, packetID);
 }
 
 uint16_t BuildPubCompMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
-	FixedHeader FHeader;
-	PubACKVariableHeader PACKHeader;
-	uint8_t MSB_temp, LSB_temp;
-	int tempLen = 0, index = 0;
-
-	//Check if all data can be stored in Message buffer
-	tempLen = sizeof(FHeader) + sizeof(PACKHeader);
-	if (tempLen > BufferLen)
-		return 0;
-	tempLen = 0;
-	//**************************************************
-
-	Init_FixedHeader(&FHeader, PUBCOMP, 0);
-	FHeader.RemainingLengthMSB = 0;
-	FHeader.RemainingLengthLSB = 2;
-
-	u16ToMSBandLSB(packetID, &MSB_temp, &LSB_temp);
-	PACKHeader.MSB_PacketIdentifier = MSB_temp;
-	PACKHeader.LSB_PacketIdentifier = LSB_temp;
-
-	memcpy(Buffer, &FHeader, sizeof(FHeader));
-	index = sizeof(FHeader);
-	memcpy(Buffer+index, &PACKHeader, sizeof(PACKHeader));
-	index += sizeof(PACKHeader);
-
-	return (uint16_t) index;
+	return ACKSimpleFunctionTemplate(PUBCOMP, Buffer, BufferLen, packetID);
 }
 
 /* Function return length of applied bytes.
@@ -406,44 +306,121 @@ uint16_t BuildSubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID, u
 	return (uint16_t) index;
 }
 
-uint16_t BuildUnSubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
+
+uint16_t BuildUnSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, uint8_t TopicNo, uint16_t *packetID){
 	FixedHeader FHeader;
-	SubscribeVariableHeader UnSubACKHeader;
-	uint8_t MSB_temp, LSB_temp;
+	UnSubscribeVariableHeader USVHeader;
+	uint8_t MSB_temp, LSB_temp, i = 0;
 	int tempLen = 0, index = 0;
 
+	Init_FixedHeader(&FHeader, UNSUBSCRIBE, 0);
+
+	srand ( time(NULL) );
+	*packetID = (uint16_t) (rand() % 65535);
+
 	//Check if all data can be stored in Message buffer
-	tempLen = sizeof(FHeader) + sizeof(UnSubACKHeader);
+	tempLen += sizeof(FHeader) + sizeof(USVHeader);
+	for (i=0; i<TopicNo; i++)
+		tempLen += 2 + strlen(Topic[i]);
 	if (tempLen > BufferLen)
 		return 0;
 	tempLen = 0;
 	//**************************************************
 
-	Init_FixedHeader(&FHeader, UNSUBACK, 0);
-	FHeader.RemainingLengthMSB = 0;
-	FHeader.RemainingLengthLSB = 2;
+	u16ToMSBandLSB(*packetID, &MSB_temp, &LSB_temp);
+	USVHeader.MSB_PacketIdentifier = MSB_temp;
+	USVHeader.LSB_PacketIdentifier = LSB_temp;
 
-	u16ToMSBandLSB(packetID, &MSB_temp, &LSB_temp);
-	UnSubACKHeader.MSB_PacketIdentifier = MSB_temp;
-	UnSubACKHeader.LSB_PacketIdentifier = LSB_temp;
-
-	memcpy(Buffer, &FHeader, sizeof(FHeader));
 	index = sizeof(FHeader);
-	memcpy(Buffer+index, &UnSubACKHeader, sizeof(UnSubACKHeader));
-	index += sizeof(UnSubACKHeader);
+	memcpy(Buffer+index, &USVHeader, sizeof(USVHeader));
+	index += sizeof(USVHeader);
+
+	//**** Payload part *****//
+	for (i=0; i<TopicNo; i++){
+		tempLen = strlen(Topic[i]);
+		u16ToMSBandLSB(tempLen, &MSB_temp, &LSB_temp);
+		Buffer[index] = MSB_temp;
+		Buffer[index+1] = LSB_temp;
+		index += 2;
+		memcpy(Buffer + index, Topic[i], tempLen);
+		index += tempLen;
+	}
+	//**** Payload part *****//
+
+	u16ToMSBandLSB(index-sizeof(FixedHeader), &MSB_temp, &LSB_temp);
+	FHeader.RemainingLengthMSB = MSB_temp;
+	FHeader.RemainingLengthLSB = LSB_temp;
+	memcpy(Buffer, &FHeader, sizeof(FHeader));
 
 	return (uint16_t) index;
 }
 
-void gen_random(char *s, const int len) {
-	int i = 0;
-    static const char alphanum[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-    for(i = 0; i < len; ++i) {
-        s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
-    }
-    s[len] = 0;
+
+uint16_t BuildUnSubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
+	return ACKSimpleFunctionTemplate(UNSUBACK, Buffer, BufferLen, packetID);
 }
 
+/*
+ * Function used as a template for such packets like PubACK, PubRel, PubRec, PubComp, UnSubscribeACK.
+ * Make packets containing only fixed header and variable header (packet ID).
+ */
+uint16_t ACKSimpleFunctionTemplate(uint8_t MessageType, uint8_t *Buffer, int BufferLen, uint16_t packetID){
+	FixedHeader FHeader;
+	DummyStruct DummyVHeader;
+	uint8_t MSB_temp, LSB_temp;
+	int tempLen = 0, index = 0;
+
+	//Check if all data can be stored in Message buffer
+	tempLen = sizeof(FHeader) + sizeof(DummyVHeader);
+	if (tempLen > BufferLen)
+		return 0;
+	tempLen = 0;
+	//**************************************************
+
+	Init_FixedHeader(&FHeader, MessageType, 0);
+	FHeader.RemainingLengthMSB = 0;
+	FHeader.RemainingLengthLSB = 2;
+
+	u16ToMSBandLSB(packetID, &MSB_temp, &LSB_temp);
+	DummyVHeader.MSB_PacketIdentifier = MSB_temp;
+	DummyVHeader.LSB_PacketIdentifier = LSB_temp;
+
+	memcpy(Buffer, &FHeader, sizeof(FHeader));
+	index = sizeof(FHeader);
+	memcpy(Buffer+index, &DummyVHeader, sizeof(DummyVHeader));
+	index += sizeof(DummyVHeader);
+
+	return (uint16_t) index;
+}
+
+uint16_t BuildPingReq(uint8_t *Buffer, int BufferLen){
+	return VerySimpleBuildingTemplate(PINGREQ, Buffer, BufferLen);
+}
+
+uint16_t BuildPingResp(uint8_t *Buffer, int BufferLen){
+	return VerySimpleBuildingTemplate(PINGRESP, Buffer, BufferLen);
+}
+
+uint16_t BuildDisconnect(uint8_t *Buffer, int BufferLen){
+	return VerySimpleBuildingTemplate(DISCONNECT, Buffer, BufferLen);
+}
+
+/*
+ * Function used as a template for such packets like PingReq, PingResp, Disconnect.
+ * Make packets containing only fixed header.
+ */
+uint16_t VerySimpleBuildingTemplate(uint8_t MessageType, uint8_t *Buffer, int BufferLen){
+	FixedHeader FHeader;
+
+	//Check if all data can be stored in Message buffer
+	if (sizeof(FHeader) > BufferLen)
+		return 0;
+	//**************************************************
+
+	Init_FixedHeader(&FHeader, MessageType, 0);
+	FHeader.RemainingLengthMSB = 0;
+	FHeader.RemainingLengthLSB = 0;
+	memcpy(Buffer, &FHeader, sizeof(FHeader));
+
+	return (uint16_t) sizeof(FHeader);
+}

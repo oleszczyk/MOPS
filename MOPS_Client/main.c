@@ -31,9 +31,9 @@ int main(void)
 	uint8_t *topic[2]= {"Wysylam", "Cos"};
 	uint8_t qos[][1] = {{2}, {2}, {1}};
 
-	//len = BuildConnectMessage(Message, 22, 20);
+	//len = BuildConnectMessage(Message, 23, 20);
 	//len = BuildSubscribeMessage(Message, 21, topic, qos, 2, &packetID);
-	len = BuildUnSubACKMessage(Message, 5, 512);
+	len = BuildDisconnect(Message, 255);
 
 	//printf("\n");
 	printf("%d, %d \n", len, packetID);
