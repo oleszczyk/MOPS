@@ -9,6 +9,9 @@
 #define MOPS_H_
 #include <stdint.h>
 
+
+#define SOCK_PATH "./../MOPS_path"
+
 int connectMOPS();
 void publishMOPS(uint8_t *Topic, uint8_t *Message, uint8_t length);
 void subscribeMOPS(uint8_t **TopicList, uint8_t **QosList);

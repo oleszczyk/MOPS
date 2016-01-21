@@ -15,8 +15,6 @@
 #include <stdint.h>
 #include "MOPS.h"
 
-#define SOCK_PATH "./../MOPS_path"
-
 static int file_desc;
 static int state = 0;
 static struct sockaddr_un remote;

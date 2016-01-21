@@ -27,10 +27,11 @@ int main(void)
 	FD_SET(s, &read_fd);
 
 	for(;;){
-	    tv.tv_sec = 0;
-	    tv.tv_usec = 500000;
+	    //sleep(1);
+		publishMOPS("Cos1", "Message", 4);
 
-		publishMOPS("Cos2", "Message", 4);
+	    tv.tv_sec = 0;
+	    tv.tv_usec = 1000;
 		rv = select(s+1, &read_fd, NULL, NULL, &tv);
 		if(rv > 0){
 			len = readMOPS(s, buffer, 100);
@@ -39,10 +40,12 @@ int main(void)
 
 		}
 		if(rv < 0 ){
+			printf("Tutaj \n");
+
 			perror("selecet");
 		}
 		if( rv == 0 ){
-			perror("selecet");
+			//perror("selecet");
 
 		}
 
