@@ -4,12 +4,15 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
+../MOPS_RTnet_Con.c \
 ../local_broker.c 
 
 OBJS += \
+./MOPS_RTnet_Con.o \
 ./local_broker.o 
 
 C_DEPS += \
+./MOPS_RTnet_Con.d \
 ./local_broker.d 
 
 

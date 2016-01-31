@@ -14,43 +14,183 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/time.h>
+#include "MOPS.h"
+#include "MOPS_RTnet_Con.h"
 
-#define SOCK_PATH "./../MOPS_path"
+
+static uint8_t MOPS_State = SEND_REQUEST;
+uint8_t input_buffer[UDP_MAX_SIZE], output_buffer[UDP_MAX_SIZE];
+uint16_t writtenBytes = 0, output_index = 0;
+TopicID list[MAX_NUMBER_OF_TOPIC];
 
 
-void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes);
+#if TARGET_DEVICE == Linux
+pthread_mutex_t output_lock, input_lock;
+#endif
+#if TARGET_DEVICE == RTnode
+SemaphoreHandle_t output_lock, input_lock;
+#endif
+
 
 int main(void)
+{
+	int RTsocket = 0;
+	mutex_init(&input_lock);
+	mutex_init(&output_lock);
+
+	InitTopicList(list);
+	AddTopicToList(list, "Rudy", 4, 2);
+	AddTopicToList(list, "Michal", 6, 128);
+	AddTopicToList(list, "GGG", 3, 257);
+	AddTopicToList(list, "GGGs", 3, 258);
+	RTsocket = connectToRTnet();
+
+    startNewThread(&threadAction, (void *)RTsocket);
+
+    for(;;){
+		receiveFromRTnet(RTsocket, input_buffer, UDP_MAX_SIZE);
+		AnalizeIncomingUDP(input_buffer, UDP_MAX_SIZE);
+    }
+}
+
+void threadAction(int RTsocket){
+	for(;;){
+		sleep(2);  // slot czasowy
+		lock_mutex(&output_lock);
+
+		switch(MOPS_State){
+		case SEND_NOTHING:
+			output_index += buildEmptyMessage(output_buffer, UDP_MAX_SIZE);
+			break;
+		case SEND_REQUEST:
+			output_index += buildTopicRequestMessage(output_buffer, UDP_MAX_SIZE);
+			break;
+		case SEND_TOPIC_LIST:
+			output_index += SendTopicList(output_buffer, UDP_MAX_SIZE, list);
+			break;
+		}
+
+		if (output_index > 0){
+			sendToRTnet(RTsocket, output_buffer, output_index);
+			MOPS_State = SEND_NOTHING;
+			memset(output_buffer, 0, UDP_MAX_SIZE);
+			output_index = 0;
+		}
+		unlock_mutex(&output_lock);
+	}
+}
+
+uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
+	int i = 0, counter = 0;
+	uint8_t *tempTopicList[MAX_NUMBER_OF_TOPIC];
+	uint16_t tempTopicIDs[MAX_NUMBER_OF_TOPIC];
+	uint16_t writtenBytes;
+
+	for (i=0; (i<MAX_NUMBER_OF_TOPIC) && (list[i].ID != 0); i++){
+		tempTopicList[i] = &list[i].Topic;
+		tempTopicIDs[i] = list[i].ID;
+		counter++;
+	}
+
+	writtenBytes = buildNewTopicMessage(Buffer, BufferLen, tempTopicList, tempTopicIDs, counter);
+	return writtenBytes;
+}
+
+uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16_t id){
+	int i = 0;
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		if ( (list[i].ID == id) || (!strncmp(list[i].Topic, topic, topicLen) && list[i].Topic[0]!=0) )
+			return 2;
+		if (list[i].ID == 0){
+			memcpy(list[i].Topic, topic, topicLen);
+			printf("Dodany %s \n", list[i].Topic);
+			list[i].ID = id;
+			return 0;
+		}
+	}
+	return 1;
+}
+
+void InitTopicList(TopicID list[]){
+	int i = 0;
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		list[i].ID = 0;
+		memset(&list[i].Topic, 0, MAX_TOPIC_LENGTH);
+	}
+}
+
+void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes){
+	memmove(buf + sizeof(ClientID), buf, nbytes);
+	memcpy(buf, &ClientID, sizeof(ClientID));
+	(*WrittenBytes) += sizeof(ClientID);
+}
+
+
+void AnalizeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen){
+	MOPSHeader MHeader;
+	memcpy(&MHeader, Buffer, sizeof(MHeader));
+
+	switch(MHeader.MOPSMessageType){
+	case TOPIC_REQUEST:
+		lock_mutex(&output_lock);
+		MOPS_State = SEND_TOPIC_LIST;
+		unlock_mutex(&output_lock);
+		break;
+	case NEW_TOPICS:
+		lock_mutex(&output_lock);
+		UpdateTopicList(Buffer, BufferLen);
+		unlock_mutex(&output_lock);
+		break;
+	case NOTHING:
+		//do not change state
+		break;
+	}
+}
+
+void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen){
+	uint16_t index = 0, messageLength = 0;
+	uint16_t tempTopicLength = 0, tempTopicID = 0;
+	uint8_t tempTopic[MAX_TOPIC_LENGTH], err;
+
+	messageLength = MSBandLSBTou16(Buffer[1], Buffer[2]) + 3;
+	index += 3;
+	printf("Message Len: %d \n", messageLength);
+	for(; index<messageLength; ){
+		tempTopicID = MSBandLSBTou16(Buffer[index], Buffer[index+1]);
+		tempTopicLength = MSBandLSBTou16(Buffer[index+2], Buffer[index+3]);
+		index += 4;
+		memcpy(tempTopic, Buffer+index, tempTopicLength);
+		printf("Dlugosc: %d\n", tempTopicLength);
+		err = AddTopicToList(list, tempTopic, tempTopicLength, tempTopicID);
+		index += tempTopicLength;
+		if(err == 1)
+			printf("Brak miejsca na liscie! \n");
+		if(err == 0)
+			printf("Dodalem, id: %d \n", tempTopicID);
+		if(err == 2)
+			printf("Topic, id: %d, juz istnieje. \n", tempTopicID);
+	}
+}
+/*
+ * int main(void)
 {
 	struct timeval tv;
     int t, len, i, rv, nbytes;
     struct sockaddr_un local, remote;
-    uint8_t input_buffer[512], output_buffer[512];
     int inputWrittenIndex = 0, outpuWrittenIndex = 0;
     int free_space;
-
     int licznik = 0;
-
-
     fd_set master;  //master fd list
     fd_set read_fd; //temp fd list for select()
 	int fdmax;		//maximum fd number
-
 	int listener;   //listening socket descriptor
 	int newfd;		//newly accept()ed socket descriptor
-
-
 	memset(input_buffer, 0, sizeof(input_buffer));
 	memset(output_buffer, 0, sizeof(output_buffer));
-
-	FD_ZERO(&master);
-	FD_ZERO(&read_fd);
-
     if ((listener = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket");
         exit(1);
     }
-
     local.sun_family = AF_UNIX;
     strcpy(local.sun_path, SOCK_PATH);
     unlink(local.sun_path);
@@ -59,23 +199,20 @@ int main(void)
         perror("bind");
         exit(1);
     }
-
     if (listen(listener, 5) == -1) {
         perror("listen");
         exit(1);
     }
-
+	FD_ZERO(&master);
+	FD_ZERO(&read_fd);
     //add listener to the master set
     FD_SET(listener, &master);
     fdmax = listener;
-
-
     for(;;){
     	free_space = sizeof(input_buffer)-(inputWrittenIndex*sizeof(input_buffer[0]));
     	tv.tv_sec = 0;
         tv.tv_usec = 10000;
     	read_fd = master;
-
     	if( free_space <= sizeof(input_buffer)/10 )
     		rv = 0;		//go to "idle state"
 		else{
@@ -84,7 +221,6 @@ int main(void)
 				exit(4);
 			}
 		}
-
     	if(rv > 0){
 			for(i = 0; i <=fdmax; i++){
 				if (FD_ISSET(i, &read_fd)){
@@ -99,7 +235,6 @@ int main(void)
 							if(newfd > fdmax)
 								fdmax = newfd;
 							printf("Nowy deskryptor: %d \n", newfd);
-
 						}
 					}
 					else{
@@ -125,7 +260,6 @@ int main(void)
 							}
 						}
 					}
-
 				}
 			}
     	}
@@ -146,15 +280,7 @@ int main(void)
     			licznik = 0 ;
     		}
     	}
-
     }
     return 0;
 }
-
-
-void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes){
-	memmove(buf + sizeof(ClientID), buf, nbytes);
-	memcpy(buf, &ClientID, sizeof(ClientID));
-	(*WrittenBytes) += sizeof(ClientID);
-}
-
+ */
