@@ -15,11 +15,12 @@
 #include <stdint.h>
 #include "MOPS.h"
 
-static int file_desc;
+//static int file_desc;
 static int state = 0;
 static struct sockaddr_un remote;
 
 int connectMOPS(){
+	int file_desc;
     if ((file_desc = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket");
     }
@@ -39,8 +40,8 @@ int connectMOPS(){
 
 
 
-void publishMOPS(uint8_t *Topic, uint8_t *Message, uint8_t length){
-    if (send(file_desc, Topic, length, 0) == -1) {
+void publishMOPS(int fd, uint8_t *Topic, uint8_t *Message, uint8_t length){
+    if (send(fd, Topic, length, 0) == -1) {
         perror("send");
         exit(1);
     }
@@ -53,7 +54,7 @@ void subscribeMOPS(uint8_t **TopicList, uint8_t **QosList){
 int readMOPS(int fd, uint8_t *buf, uint8_t length){
     int t;
 
-	if ((t=recv(file_desc, buf, length, 0)) > 0) {
+	if ((t=recv(fd, buf, length, 0)) > 0) {
 		buf[t] = '\0';
     } else {
         if (t < 0) perror("recv");
@@ -61,3 +62,7 @@ int readMOPS(int fd, uint8_t *buf, uint8_t length){
     }
     return t;
 }
+
+
+int BindSocket();
+

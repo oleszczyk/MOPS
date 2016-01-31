@@ -28,11 +28,13 @@ int main(void)
 
 	for(;;){
 	    //sleep(1);
-		publishMOPS("Cos1", "Message", 4);
+		publishMOPS(s, "Cos1", "Message", 4);
 
 	    tv.tv_sec = 0;
 	    tv.tv_usec = 1000;
-		rv = select(s+1, &read_fd, NULL, NULL, &tv);
+	    usleep(300);
+	    /*
+	    rv = select(s+1, &read_fd, NULL, NULL, &tv);
 		if(rv > 0){
 			len = readMOPS(s, buffer, 100);
 
@@ -48,7 +50,7 @@ int main(void)
 			//perror("selecet");
 
 		}
-
+		*/
 	}
     close(s);
     return 0;

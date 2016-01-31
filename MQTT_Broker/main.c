@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <stdint.h>
 
 #define BUFLEN 44
 #define NPACK 10

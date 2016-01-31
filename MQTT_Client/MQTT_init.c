@@ -27,7 +27,6 @@ void Init_FixedHeader(FixedHeader *FHeader, uint8_t MessageType, uint8_t Flags){
 }
 
 
-
 void Init_ProtocolName(ProtocolName *PName){
 	PName->MSB_Length = 0;
 	PName->LSB_Length = 4;
