@@ -18,12 +18,12 @@
 #define PORT 1883
 #define UDP_MAX_SIZE 512
 
-#define MAX_TOPIC_LENGTH 30
-#define MAX_NUMBER_OF_TOPIC 5
+#define MAX_TOPIC_LENGTH 30	   //max is 2^16-1
+#define MAX_NUMBER_OF_TOPIC 8  //max is 2^16-1
 //***************Settings********************
 
 typedef struct TopicID{
-	uint8_t Topic[MAX_TOPIC_LENGTH];
+	uint8_t Topic[MAX_TOPIC_LENGTH+1];
 	uint16_t ID;
 }TopicID;
 

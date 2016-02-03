@@ -41,8 +41,11 @@ int main(void)
 	InitTopicList(list);
 	AddTopicToList(list, "Rudy", 4, 2);
 	AddTopicToList(list, "Michal", 6, 128);
+	AddTopicCandidate("Krowa", 5);
 	AddTopicToList(list, "GGG", 3, 257);
-	AddTopicToList(list, "GGGs", 3, 258);
+	//PrintfList(list);
+	AddTopicToList(list, "Krowa", 5, 3);
+
 	RTsocket = connectToRTnet();
 
     startNewThread(&threadAction, (void *)RTsocket);
@@ -68,6 +71,11 @@ void threadAction(int RTsocket){
 		case SEND_TOPIC_LIST:
 			output_index += SendTopicList(output_buffer, UDP_MAX_SIZE, list);
 			break;
+		case SEND_NEW_TOPIC:
+			//check if topic you want to announce is not already in your TopicList
+			//if not then add it to head of message and update TopicList
+			//else, send 'nothing'
+			break;
 		}
 
 		if (output_index > 0){
@@ -86,10 +94,12 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
 	uint16_t tempTopicIDs[MAX_NUMBER_OF_TOPIC];
 	uint16_t writtenBytes;
 
-	for (i=0; (i<MAX_NUMBER_OF_TOPIC) && (list[i].ID != 0); i++){
-		tempTopicList[i] = &list[i].Topic;
-		tempTopicIDs[i] = list[i].ID;
-		counter++;
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		if (list[i].ID != 0){
+			tempTopicList[counter] = &list[i].Topic;
+			tempTopicIDs[counter] = list[i].ID;
+			counter++;
+		}
 	}
 
 	writtenBytes = buildNewTopicMessage(Buffer, BufferLen, tempTopicList, tempTopicIDs, counter);
@@ -98,25 +108,90 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
 
 uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16_t id){
 	int i = 0;
+
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
-		if ( (list[i].ID == id) || (!strncmp(list[i].Topic, topic, topicLen) && list[i].Topic[0]!=0) )
+		//if candidate, apply ID
+		if( strncmp(list[i].Topic, topic, topicLen)==0 && list[i].Topic[0]!=0 && list[i].ID==0 ){
+			list[i].ID = id;
+			printf("Dodalem ID kandydatowi: %s \n", list[i].Topic);
+			return 0;
+		}
+		// if exists such topic (or at least ID) available, do not do anything
+		if ( (list[i].ID == id) || (strncmp(list[i].Topic, topic, topicLen)==0 && list[i].Topic[0]!=0) ){
+			printf("Nie dodam bo jest: %s \n", list[i].Topic);
 			return 2;
-		if (list[i].ID == 0){
+		}
+	}
+
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		//else add new topic in the first empty place
+		if ( list[i].ID==0 && strlen(list[i].Topic)==0 ){
 			memcpy(list[i].Topic, topic, topicLen);
-			printf("Dodany %s \n", list[i].Topic);
+			printf("Dodany: %s \n", list[i].Topic);
 			list[i].ID = id;
 			return 0;
 		}
 	}
+	//there is no place in TopicList
 	return 1;
+}
+
+
+void AddTopicCandidate(uint8_t *topic, uint16_t topicLen){
+	int i;
+	if(GetIDfromTopicName(topic, topicLen) == -1)
+		for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+			if ( list[i].ID==0 && strlen(list[i].Topic)==0 ){
+				memcpy(list[i].Topic, topic, topicLen);
+				return;
+			}
+		}
+}
+
+/*
+ * return:
+ *  ID (uint16_t value) if topic exist already in TopicList and is available
+ *  0					if topic is candidate in TopicList
+ *  -1					if topic is not available, and not candidate
+ */
+int GetIDfromTopicName(uint8_t *topic, uint16_t topicLen){
+	int i;
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		if (strncmp(list[i].Topic, topic, topicLen)==0 && list[i].Topic[0]!=0)  //when  are the same
+				return list[i].ID;
+	}
+	return -1;
+}
+
+/*
+ * POST: variable 'topic' is set as Topic with id 'id',
+ * if there is not a topic in TopicList with that id
+ * variable 'topic' is set to \0.
+ */
+void GetTopicNameFromID(uint16_t id, uint8_t *topic, uint16_t topicLen){
+	int i;
+	memset(topic, 0, topicLen);
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		if (list[i].ID == id)  //when  are the same
+			memcpy(topic, &list[i].Topic, topicLen);
+	}
 }
 
 void InitTopicList(TopicID list[]){
 	int i = 0;
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
 		list[i].ID = 0;
-		memset(&list[i].Topic, 0, MAX_TOPIC_LENGTH);
+		memset(&list[i].Topic, 0, MAX_TOPIC_LENGTH+1);
 	}
+}
+
+void PrintfList(TopicID list[]){
+	int i;
+	printf("Lista{\n");
+	for(i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		printf("    Topic: %s, ID: %d \n", list[i].Topic, list[i].ID);
+	}
+	printf("};\n");
 }
 
 void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes){
@@ -154,13 +229,11 @@ void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen){
 
 	messageLength = MSBandLSBTou16(Buffer[1], Buffer[2]) + 3;
 	index += 3;
-	printf("Message Len: %d \n", messageLength);
 	for(; index<messageLength; ){
 		tempTopicID = MSBandLSBTou16(Buffer[index], Buffer[index+1]);
 		tempTopicLength = MSBandLSBTou16(Buffer[index+2], Buffer[index+3]);
 		index += 4;
 		memcpy(tempTopic, Buffer+index, tempTopicLength);
-		printf("Dlugosc: %d\n", tempTopicLength);
 		err = AddTopicToList(list, tempTopic, tempTopicLength, tempTopicID);
 		index += tempTopicLength;
 		if(err == 1)
