@@ -25,6 +25,7 @@
 typedef struct TopicID{
 	uint8_t Topic[MAX_TOPIC_LENGTH+1];
 	uint16_t ID;
+	uint8_t LocalTopic;
 }TopicID;
 
 

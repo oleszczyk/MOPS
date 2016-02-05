@@ -39,12 +39,12 @@ int main(void)
 	mutex_init(&output_lock);
 
 	InitTopicList(list);
-	AddTopicToList(list, "Rudy", 4, 2);
-	AddTopicToList(list, "Michal", 6, 128);
+	AddTopicToList(list, "Rudy", 4, 1);
+	AddTopicToList(list, "Michal", 6, 2);
 	AddTopicCandidate("Krowa", 5);
-	AddTopicToList(list, "GGG", 3, 257);
-	//PrintfList(list);
-	AddTopicToList(list, "Krowa", 5, 3);
+	AddTopicToList(list, "GGG", 3, 4);
+	PrintfList(list);
+
 
 	RTsocket = connectToRTnet();
 
@@ -53,6 +53,7 @@ int main(void)
     for(;;){
 		receiveFromRTnet(RTsocket, input_buffer, UDP_MAX_SIZE);
 		AnalizeIncomingUDP(input_buffer, UDP_MAX_SIZE);
+		PrintfList(list);
     }
 }
 
@@ -69,12 +70,17 @@ void threadAction(int RTsocket){
 			output_index += buildTopicRequestMessage(output_buffer, UDP_MAX_SIZE);
 			break;
 		case SEND_TOPIC_LIST:
+			ApplyIDtoNewTopics();
 			output_index += SendTopicList(output_buffer, UDP_MAX_SIZE, list);
 			break;
 		case SEND_NEW_TOPIC:
-			//check if topic you want to announce is not already in your TopicList
-			//if not then add it to head of message and update TopicList
+			//check if there are local topic to announce
+			//if yes, then add them to head of message and update TopicList - reset LocalTopic flag
 			//else, send 'nothing'
+			if( ApplyIDtoNewTopics() )
+				output_index += SendLocalTopics(output_buffer, UDP_MAX_SIZE, list);
+			else
+				output_index += buildEmptyMessage(output_buffer, UDP_MAX_SIZE);
 			break;
 		}
 
@@ -88,6 +94,10 @@ void threadAction(int RTsocket){
 	}
 }
 
+/*
+ * Sending all available (not candidate) topics to RTnet,
+ * after that local topics become global.
+ */
 uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
 	int i = 0, counter = 0;
 	uint8_t *tempTopicList[MAX_NUMBER_OF_TOPIC];
@@ -98,6 +108,8 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
 		if (list[i].ID != 0){
 			tempTopicList[counter] = &list[i].Topic;
 			tempTopicIDs[counter] = list[i].ID;
+			if(list[i].LocalTopic == 1)
+				list[i].LocalTopic = 0;
 			counter++;
 		}
 	}
@@ -105,6 +117,29 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
 	writtenBytes = buildNewTopicMessage(Buffer, BufferLen, tempTopicList, tempTopicIDs, counter);
 	return writtenBytes;
 }
+
+/*
+ * Sending only local topics to RTnet,
+ * after that local topics become global.
+ */
+uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]){
+	int i = 0, counter = 0;
+	uint8_t *tempTopicList[MAX_NUMBER_OF_TOPIC];
+	uint16_t tempTopicIDs[MAX_NUMBER_OF_TOPIC];
+	uint16_t writtenBytes;
+
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		if (list[i].ID != 0 && list[i].LocalTopic==1){
+			tempTopicList[counter] = &list[i].Topic;
+			tempTopicIDs[counter] = list[i].ID;
+			list[i].LocalTopic = 0;
+			counter++;
+		}
+	}
+	writtenBytes = buildNewTopicMessage(Buffer, BufferLen, tempTopicList, tempTopicIDs, counter);
+	return writtenBytes;
+}
+
 
 uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16_t id){
 	int i = 0;
@@ -136,6 +171,26 @@ uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16
 	return 1;
 }
 
+
+uint8_t ApplyIDtoNewTopics(){
+	int i;
+	uint8_t localTopicFlag = 0;
+	uint16_t max = 0;
+
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		if(list[i].ID > max)
+			max = list[i].ID;
+	}
+	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
+		if ( list[i].ID==0 && strlen(list[i].Topic)!=0 ){
+			list[i].ID = max+1;
+			list[i].LocalTopic = 1;
+			max++;
+			localTopicFlag = 1;
+		}
+	}
+	return localTopicFlag;
+}
 
 void AddTopicCandidate(uint8_t *topic, uint16_t topicLen){
 	int i;
@@ -181,6 +236,7 @@ void InitTopicList(TopicID list[]){
 	int i = 0;
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
 		list[i].ID = 0;
+		list[i].LocalTopic = 0;
 		memset(&list[i].Topic, 0, MAX_TOPIC_LENGTH+1);
 	}
 }
