@@ -13,12 +13,42 @@
 #include <sys/types.h>
 #include "MOPS_RTnet_Con.h"
 
+
+typedef struct TopicID{
+	uint8_t Topic[MAX_TOPIC_LENGTH+1];
+	uint16_t ID;
+	uint8_t LocalTopic;	//flag - if 1 then topic has to be send to RTnet
+}TopicID;
+
+typedef struct SubscriberList{
+	uint8_t Topic[MAX_TOPIC_LENGTH+1];
+	int ClientID;
+}SubscriberList;
+
 enum MOPS_STATE{
 	SEND_NOTHING = 1,
 	SEND_REQUEST,
 	SEND_TOPIC_LIST,
-	SEND_NEW_TOPIC,
 };
+
+
+#if TARGET_DEVICE == Linux
+#define SOCK_PATH "./../MOPS_path"
+#endif //TARGET_DEVICE == Linux
+
+#if TARGET_DEVICE == RTnode
+#define MAX_PROCES_CONNECTION 3 //number of local processes connected to MOPS broker
+
+typedef struct RTnodeSocket{
+	QueueHandle_t  	ProcesToMOPS;
+	QueueHandle_t  	MOPSToProces;
+}RTnodeSocket;
+#endif //TARGET_DEVICE == RTnode
+
+
+void threadSendToRTnet(int RTsocket);
+void threadRecvFromRTnet(int RTsocket);
+void threadRecvFromProcess(int socket);
 
 
 void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes);
@@ -27,7 +57,6 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]);
 uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]);
 
 uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16_t id);
-void threadAction(int RTsocket);
 void AnalizeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen);
 void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen);
 uint8_t ApplyIDtoNewTopics();
@@ -48,5 +77,7 @@ int GetIDfromTopicName(uint8_t *topic, uint16_t topicLen);
  * variable 'topic' is set to \0.
  */
 void GetTopicNameFromID(uint16_t id, uint8_t *topic, uint16_t topicLen);
+
+void InitProcesConnection();
 
 #endif /* MOPS_H_ */

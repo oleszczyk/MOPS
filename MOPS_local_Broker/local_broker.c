@@ -22,6 +22,7 @@ static uint8_t MOPS_State = SEND_REQUEST;
 uint8_t input_buffer[UDP_MAX_SIZE], output_buffer[UDP_MAX_SIZE];
 uint16_t writtenBytes = 0, output_index = 0;
 TopicID list[MAX_NUMBER_OF_TOPIC];
+SubscriberList SubList[MAX_NUMBER_OF_SUBSCRIPTIONS];
 
 
 #if TARGET_DEVICE == Linux
@@ -45,35 +46,33 @@ int main(void)
 	AddTopicToList(list, "GGG", 3, 4);
 	PrintfList(list);
 
-
 	RTsocket = connectToRTnet();
 
-    startNewThread(&threadAction, (void *)RTsocket);
 
+
+    startNewThread(&threadSendToRTnet, (void *)RTsocket);
+    startNewThread(&threadRecvFromRTnet, (void *)RTsocket);
+
+	InitProcesConnection();
+}
+
+void threadRecvFromRTnet(int RTsocket){
     for(;;){
+    	lock_mutex(&input_lock);
 		receiveFromRTnet(RTsocket, input_buffer, UDP_MAX_SIZE);
 		AnalizeIncomingUDP(input_buffer, UDP_MAX_SIZE);
-		PrintfList(list);
+		//PrintfList(list);
+		unlock_mutex(&input_lock);
     }
 }
 
-void threadAction(int RTsocket){
+void threadSendToRTnet(int RTsocket){
 	for(;;){
 		sleep(2);  // slot czasowy
 		lock_mutex(&output_lock);
 
 		switch(MOPS_State){
 		case SEND_NOTHING:
-			output_index += buildEmptyMessage(output_buffer, UDP_MAX_SIZE);
-			break;
-		case SEND_REQUEST:
-			output_index += buildTopicRequestMessage(output_buffer, UDP_MAX_SIZE);
-			break;
-		case SEND_TOPIC_LIST:
-			ApplyIDtoNewTopics();
-			output_index += SendTopicList(output_buffer, UDP_MAX_SIZE, list);
-			break;
-		case SEND_NEW_TOPIC:
 			//check if there are local topic to announce
 			//if yes, then add them to head of message and update TopicList - reset LocalTopic flag
 			//else, send 'nothing'
@@ -81,6 +80,13 @@ void threadAction(int RTsocket){
 				output_index += SendLocalTopics(output_buffer, UDP_MAX_SIZE, list);
 			else
 				output_index += buildEmptyMessage(output_buffer, UDP_MAX_SIZE);
+			break;
+		case SEND_REQUEST:
+			output_index += buildTopicRequestMessage(output_buffer, UDP_MAX_SIZE);
+			break;
+		case SEND_TOPIC_LIST:
+			ApplyIDtoNewTopics();
+			output_index += SendTopicList(output_buffer, UDP_MAX_SIZE, list);
 			break;
 		}
 
@@ -203,6 +209,7 @@ void AddTopicCandidate(uint8_t *topic, uint16_t topicLen){
 		}
 }
 
+
 /*
  * return:
  *  ID (uint16_t value) if topic exist already in TopicList and is available
@@ -300,10 +307,58 @@ void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen){
 			printf("Topic, id: %d, juz istnieje. \n", tempTopicID);
 	}
 }
+
+
+#if TARGET_DEVICE == Linux
+void InitProcesConnection(){
+    struct sockaddr_un local, remote;
+	int listener, len, t;
+	int newfd;		//newly accept()ed socket descriptor
+    if ((listener = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+        perror("socket");
+
+    local.sun_family = AF_UNIX;
+    strcpy(local.sun_path, SOCK_PATH);
+    unlink(local.sun_path);
+    len = strlen(local.sun_path) + sizeof(local.sun_family);
+    if (bind(listener, (struct sockaddr *)&local, len) == -1)
+        perror("bind");
+
+    if (listen(listener, 5) == -1)
+        perror("listen");
+
+    for(;;){
+		t = sizeof(remote);
+		newfd = accept(listener,(struct sockaddr *)&remote, &t);
+		printf("Wlasnie zaakceptowalem proces: %d\n", newfd);
+		startNewThread(&threadRecvFromProcess, (void *)newfd);
+    }
+}
+
+void threadRecvFromProcess(int socket){
+    for(;;){
+    	uint8_t temp[UDP_MAX_SIZE/4];
+    	uint8_t index = 0;
+
+		receiveFromRTnet(socket, temp, UDP_MAX_SIZE/4);
+
+    	lock_mutex(&output_lock);
+    	//tutaj uzupelnij tablice ktora ma isc w swiat
+    	printf("Odebralem cos: %d %d %d %d %d %d %d  \n", temp[0],temp[1],temp[2],temp[3],temp[4],temp[5],temp[6]);
+		unlock_mutex(&output_lock);
+    }
+}
+#endif //TARGET_DEVICE == Linux
+#if TARGET_DEVICE == RTnode
+void InitProcesConnection(){
+
+	for(;;){}
+}
+#endif //TARGET_DEVICE == RTnode
+
 /*
  * int main(void)
 {
-	struct timeval tv;
     int t, len, i, rv, nbytes;
     struct sockaddr_un local, remote;
     int inputWrittenIndex = 0, outpuWrittenIndex = 0;
@@ -399,15 +454,6 @@ void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen){
             //here make other stuff
     		//reorganize data,
     		//pack everything together and wait for time slot to send everything to RTnet
-    		//
-    		// unpack data from RTnet
-    		// resend data to subprocesses
-    		if(licznik > 10){
-    			printf("Dane: %s \n", input_buffer);
-    			memset(input_buffer, 0, sizeof(input_buffer));
-    			inputWrittenIndex = 0;
-    			licznik = 0 ;
-    		}
     	}
     }
     return 0;

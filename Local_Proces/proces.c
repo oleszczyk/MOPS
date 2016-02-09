@@ -12,46 +12,37 @@
 
 int main(void)
 {
-	fd_set read_fd;
-	struct timeval tv;
-    int s, len, rv;
+    int s;
     uint8_t topic[][1]={"Topic"};
     uint8_t Qos[][1]={1};
-    uint8_t buffer[100];
-
 
 	s = connectMOPS();
 	subscribeMOPS(topic, Qos);
 
-	FD_ZERO(&read_fd);
-	FD_SET(s, &read_fd);
-
 	for(;;){
-	    //sleep(1);
-		publishMOPS(s, "Cos1", "Message", 4);
-
-	    tv.tv_sec = 0;
-	    tv.tv_usec = 1000;
-	    usleep(300);
-	    /*
-	    rv = select(s+1, &read_fd, NULL, NULL, &tv);
-		if(rv > 0){
-			len = readMOPS(s, buffer, 100);
-
-			printf("%s \n", buffer);
-
-		}
-		if(rv < 0 ){
-			printf("Tutaj \n");
-
-			perror("selecet");
-		}
-		if( rv == 0 ){
-			//perror("selecet");
-
-		}
-		*/
+	    sleep(2);
+		publishMOPS(s, "Cos5", "Message");
 	}
     close(s);
     return 0;
 }
+
+
+/*
+rv = select(s+1, &read_fd, NULL, NULL, &tv);
+if(rv > 0){
+	len = readMOPS(s, buffer, 100);
+
+	printf("%s \n", buffer);
+
+}
+if(rv < 0 ){
+	printf("Tutaj \n");
+
+	perror("selecet");
+}
+if( rv == 0 ){
+	//perror("selecet");
+
+}
+*/

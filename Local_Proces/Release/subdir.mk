@@ -4,14 +4,17 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
+../MQTT.c \
 ../MOPS.c \
 ../proces.c 
 
 OBJS += \
+./MQTT.o \
 ./MOPS.o \
 ./proces.o 
 
 C_DEPS += \
+./MQTT.d \
 ./MOPS.d \
 ./proces.d 
 

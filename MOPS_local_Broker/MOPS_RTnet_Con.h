@@ -18,15 +18,10 @@
 #define PORT 1883
 #define UDP_MAX_SIZE 512
 
-#define MAX_TOPIC_LENGTH 30	   //max is 2^16-1
-#define MAX_NUMBER_OF_TOPIC 8  //max is 2^16-1
+#define MAX_TOPIC_LENGTH             30      //max is 2^16-1
+#define MAX_NUMBER_OF_TOPIC          8       //max is 2^16-1
+#define MAX_NUMBER_OF_SUBSCRIPTIONS  100     //max is 2^16-1
 //***************Settings********************
-
-typedef struct TopicID{
-	uint8_t Topic[MAX_TOPIC_LENGTH+1];
-	uint16_t ID;
-	uint8_t LocalTopic;
-}TopicID;
 
 
 //**** MOPS - MOPS communication protocol ****
@@ -52,23 +47,22 @@ uint16_t buildEmptyMessage(uint8_t *Buffer, int BufferLen);
 
 
 int connectToRTnet();
-int SetBroadcastSocket();
-int SetReceivingSocket();
-
 int receiveFromRTnet(int socket, uint8_t *buf, int buflen);
+void sendToRTnet(int socket, uint8_t *buf, int buflen);
 
 #if TARGET_DEVICE == Linux
 pthread_t startNewThread(void *(*start_routine) (void *), void *arg);
 uint8_t mutex_init(pthread_mutex_t *lock);
 void lock_mutex(pthread_mutex_t *lock);
 void unlock_mutex(pthread_mutex_t *lock);
-#endif
+#endif //TARGET_DEVICE == Linux
 
 
 #if TARGET_DEVICE == RTnode
+void startNewThread(void *(*start_routine) (void *), void *arg);
 uint8_t mutex_init(SemaphoreHandle_t *lock);
 void lock_mutex(SemaphoreHandle_t *lock);
 void unlock_mutex(SemaphoreHandle_t *lock);
-#endif
+#endif //TARGET_DEVICE == RTnode
 
 #endif /* MOPS_RTNET_CON_H_ */

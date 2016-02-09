@@ -87,11 +87,18 @@ void unlock_mutex(pthread_mutex_t *lock){
 
 
 #if TARGET_DEVICE == RTnode
+void startNewThread(void *(*start_routine) (void *), void *arg){
+
+}
+
 int connectToRTnet(){
 	int bcast_sock = 1;
     return bcast_sock;
 }
 
+void sendToRTnet(int socket, uint8_t *buf, int buflen){
+	return;
+}
 int receiveFromRTnet(int socket, uint8_t *buf, int buflen){
 	return 0;
 }
@@ -114,7 +121,7 @@ void unlock_mutex(SemaphoreHandle_t *lock){
 
 
 
-//**** MOPS - MOPS communication protocol ****
+//***************** MOPS - MOPS communication protocol ********************
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB){
 	uint16_t temp;
 	*LSB = (uint8_t) u16bit;
@@ -210,4 +217,4 @@ uint16_t buildEmptyMessage(uint8_t *Buffer, int BufferLen){
 
 	return index;
 }
-//********************************************
+//*********************************************************************
