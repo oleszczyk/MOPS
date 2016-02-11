@@ -16,6 +16,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include "MOPS_RTnet_Con.h"
+#include "MOPS.h"
 
 
 static struct sockaddr_in remote;
@@ -122,21 +123,6 @@ void unlock_mutex(SemaphoreHandle_t *lock){
 
 
 //***************** MOPS - MOPS communication protocol ********************
-void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB){
-	uint16_t temp;
-	*LSB = (uint8_t) u16bit;
-	temp = u16bit>>8;
-	*MSB = (uint8_t) temp;
-}
-
-uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB){
-	uint16_t temp;
-	temp = MSB;
-	temp = temp<<8;
-	temp += LSB;
-	return temp;
-}
-
 uint16_t buildTopicRequestMessage(uint8_t *Buffer, int BufferLen){
 	MOPSHeader MHeader;
 	uint8_t index = 0, tempLen = 0;

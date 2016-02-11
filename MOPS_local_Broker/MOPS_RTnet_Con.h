@@ -19,6 +19,7 @@
 #define UDP_MAX_SIZE 512
 
 #define MAX_TOPIC_LENGTH             30      //max is 2^16-1
+#define MAX_MESSAGE_LENGTH			 100	 //max is 2^16-1
 #define MAX_NUMBER_OF_TOPIC          8       //max is 2^16-1
 #define MAX_NUMBER_OF_SUBSCRIPTIONS  100     //max is 2^16-1
 //***************Settings********************
@@ -37,8 +38,6 @@ typedef struct MOPSHeader{
 	uint8_t RemainingLengthLSB;
 }MOPSHeader;
 
-void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);
-uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB);
 uint16_t buildTopicRequestMessage(uint8_t *Buffer, int BufferLen);
 uint16_t buildNewTopicMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topics, uint16_t *IDs, int TopicNo);
 uint16_t buildEmptyMessage(uint8_t *Buffer, int BufferLen);

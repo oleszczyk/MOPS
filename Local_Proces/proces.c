@@ -23,26 +23,6 @@ int main(void)
 	    sleep(2);
 		publishMOPS(s, "Cos5", "Message");
 	}
-    close(s);
+    //close(s);
     return 0;
 }
-
-
-/*
-rv = select(s+1, &read_fd, NULL, NULL, &tv);
-if(rv > 0){
-	len = readMOPS(s, buffer, 100);
-
-	printf("%s \n", buffer);
-
-}
-if(rv < 0 ){
-	printf("Tutaj \n");
-
-	perror("selecet");
-}
-if( rv == 0 ){
-	//perror("selecet");
-
-}
-*/

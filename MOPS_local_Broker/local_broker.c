@@ -4,7 +4,7 @@
  *  Created on: Jan 20, 2016
  *      Author: rudy
  */
-
+#include <sys/select.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,21 +15,22 @@
 #include <sys/un.h>
 #include <sys/time.h>
 #include "MOPS.h"
+#include "MQTT.h"
 #include "MOPS_RTnet_Con.h"
 
 
 static uint8_t MOPS_State = SEND_REQUEST;
-uint8_t input_buffer[UDP_MAX_SIZE], output_buffer[UDP_MAX_SIZE];
-uint16_t writtenBytes = 0, output_index = 0;
+uint8_t input_buffer[UDP_MAX_SIZE], output_buffer[UDP_MAX_SIZE], waiting_output_buffer[UDP_MAX_SIZE];
+uint16_t writtenBytes = 0, output_index = 0, waiting_output_index = 0;
 TopicID list[MAX_NUMBER_OF_TOPIC];
 SubscriberList SubList[MAX_NUMBER_OF_SUBSCRIPTIONS];
-
+MOPS_Queue mops_queue[MAX_PROCES_CONNECTION];
 
 #if TARGET_DEVICE == Linux
-pthread_mutex_t output_lock, input_lock;
+pthread_mutex_t output_lock, input_lock, waiting_output_lock;
 #endif
 #if TARGET_DEVICE == RTnode
-SemaphoreHandle_t output_lock, input_lock;
+SemaphoreHandle_t output_lock, input_lock, waiting_output_lock;
 #endif
 
 
@@ -40,15 +41,9 @@ int main(void)
 	mutex_init(&output_lock);
 
 	InitTopicList(list);
-	AddTopicToList(list, "Rudy", 4, 1);
-	AddTopicToList(list, "Michal", 6, 2);
-	AddTopicCandidate("Krowa", 5);
-	AddTopicToList(list, "GGG", 3, 4);
-	PrintfList(list);
+	MOPS_QueueInit(mops_queue);
 
 	RTsocket = connectToRTnet();
-
-
 
     startNewThread(&threadSendToRTnet, (void *)RTsocket);
     startNewThread(&threadRecvFromRTnet, (void *)RTsocket);
@@ -56,12 +51,20 @@ int main(void)
 	InitProcesConnection();
 }
 
+void MOPS_QueueInit(MOPS_Queue *queue){
+	int i = 0;
+	for(i=0; i<MAX_PROCES_CONNECTION; i++)
+	{
+		queue->MOPSToProces_fd = 0;
+		queue->ProcesToMOPS_fd = 0;
+	}
+}
+
 void threadRecvFromRTnet(int RTsocket){
     for(;;){
     	lock_mutex(&input_lock);
 		receiveFromRTnet(RTsocket, input_buffer, UDP_MAX_SIZE);
 		AnalizeIncomingUDP(input_buffer, UDP_MAX_SIZE);
-		//PrintfList(list);
 		unlock_mutex(&input_lock);
     }
 }
@@ -119,7 +122,6 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
 			counter++;
 		}
 	}
-
 	writtenBytes = buildNewTopicMessage(Buffer, BufferLen, tempTopicList, tempTopicIDs, counter);
 	return writtenBytes;
 }
@@ -154,12 +156,12 @@ uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16
 		//if candidate, apply ID
 		if( strncmp(list[i].Topic, topic, topicLen)==0 && list[i].Topic[0]!=0 && list[i].ID==0 ){
 			list[i].ID = id;
-			printf("Dodalem ID kandydatowi: %s \n", list[i].Topic);
+			//printf("Dodalem ID kandydatowi: %s \n", list[i].Topic);
 			return 0;
 		}
 		// if exists such topic (or at least ID) available, do not do anything
 		if ( (list[i].ID == id) || (strncmp(list[i].Topic, topic, topicLen)==0 && list[i].Topic[0]!=0) ){
-			printf("Nie dodam bo jest: %s \n", list[i].Topic);
+			//printf("Nie dodam bo jest: %s \n", list[i].Topic);
 			return 2;
 		}
 	}
@@ -168,7 +170,7 @@ uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16
 		//else add new topic in the first empty place
 		if ( list[i].ID==0 && strlen(list[i].Topic)==0 ){
 			memcpy(list[i].Topic, topic, topicLen);
-			printf("Dodany: %s \n", list[i].Topic);
+			//printf("Dodany: %s \n", list[i].Topic);
 			list[i].ID = id;
 			return 0;
 		}
@@ -208,7 +210,6 @@ void AddTopicCandidate(uint8_t *topic, uint16_t topicLen){
 			}
 		}
 }
-
 
 /*
  * return:
@@ -263,7 +264,6 @@ void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int 
 	(*WrittenBytes) += sizeof(ClientID);
 }
 
-
 void AnalizeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen){
 	MOPSHeader MHeader;
 	memcpy(&MHeader, Buffer, sizeof(MHeader));
@@ -308,47 +308,115 @@ void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen){
 	}
 }
 
+int AddToMOPSQueue(int MOPS_Proces_fd, int Proces_MOPS_fd){
+	int i = 0;
+	for(i=0; i<MAX_PROCES_CONNECTION; i++)
+		if(mops_queue[i].MOPSToProces_fd==0 && mops_queue[i].ProcesToMOPS_fd==0){
+			mops_queue[i].MOPSToProces_fd = MOPS_Proces_fd;
+			mops_queue[i].ProcesToMOPS_fd = Proces_MOPS_fd;
+			return i;
+		}
+	return -1;
+}
 
 #if TARGET_DEVICE == Linux
 void InitProcesConnection(){
-    struct sockaddr_un local, remote;
-	int listener, len, t;
-	int newfd;		//newly accept()ed socket descriptor
-    if ((listener = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
-        perror("socket");
+    mqd_t mq_listener, new_mq_Proces_MOPS;
+    struct mq_attr attr;
+    struct timeval tv;
+    int bytes_read, fdmax, rv, i;
+    fd_set master, read_fd;  //master fd list, temp fd list for select()
+	FD_ZERO(&master);
+	FD_ZERO(&read_fd);
 
-    local.sun_family = AF_UNIX;
-    strcpy(local.sun_path, SOCK_PATH);
-    unlink(local.sun_path);
-    len = strlen(local.sun_path) + sizeof(local.sun_family);
-    if (bind(listener, (struct sockaddr *)&local, len) == -1)
-        perror("bind");
+    /* initialize the queue attributes */
+    attr.mq_flags = 0;
+    attr.mq_maxmsg = 10;
+    attr.mq_msgsize = MAX_QUEUE_SIZE;
+    attr.mq_curmsgs = 0;
 
-    if (listen(listener, 5) == -1)
-        perror("listen");
+	mq_listener = mq_open(QUEUE_NAME, O_CREAT | O_RDONLY, 0644, &attr);
+    if( !((mqd_t)-1 != mq_listener) )
+    	perror("MQueue Open listener");
 
-    for(;;){
-		t = sizeof(remote);
-		newfd = accept(listener,(struct sockaddr *)&remote, &t);
-		printf("Wlasnie zaakceptowalem proces: %d\n", newfd);
-		startNewThread(&threadRecvFromProcess, (void *)newfd);
+    FD_SET(mq_listener, &master);
+    fdmax = mq_listener;
+    for (;;){
+    	tv.tv_sec = 1;
+    	tv.tv_usec = 500000;
+    	read_fd = master;
+    	rv = select(fdmax+1, &read_fd, NULL, NULL, &tv);
+    	if(rv > 0){		// there are file descriptors to serve
+    		for(i = 0; i <=fdmax; i++){
+    			if (FD_ISSET(i, &read_fd)){
+					if(i == mq_listener){
+						new_mq_Proces_MOPS = ServeNewProcessConnection(&master, mq_listener);
+						if(new_mq_Proces_MOPS > fdmax)
+							fdmax = new_mq_Proces_MOPS;
+					}
+					else{
+						ReceiveFromProcess(i);
+					}
+    			}
+    		}
+    	}
+    	if(rv < 0)		// error occurred in select()
+    	    perror("select");
+    	if(rv == 0)		// timeout, we can do our things
+    		SendToProcesses();
     }
 }
 
-void threadRecvFromProcess(int socket){
-    for(;;){
-    	uint8_t temp[UDP_MAX_SIZE/4];
-    	uint8_t index = 0;
+int ReceiveFromProcess(int file_de){
+	int bytes_read;
+    uint8_t temp[MAX_QUEUE_SIZE+1];
 
-		receiveFromRTnet(socket, temp, UDP_MAX_SIZE/4);
+	bytes_read = mq_receive(file_de, temp, MAX_QUEUE_SIZE, NULL);
+	AnalizeProcessMessage(temp, bytes_read);
+	return 0;
+}
 
-    	lock_mutex(&output_lock);
-    	//tutaj uzupelnij tablice ktora ma isc w swiat
-    	printf("Odebralem cos: %d %d %d %d %d %d %d  \n", temp[0],temp[1],temp[2],temp[3],temp[4],temp[5],temp[6]);
-		unlock_mutex(&output_lock);
+//TODO
+int SendToProcesses(){
+	printf("Tutaj sobie baki zbijam \n");
+	return 0;
+}
+
+/*
+ * Return:
+ * 	file descriptor (int) - when there is place in MOPSQueue array
+ * 	-1 					  - if there is not place in MOPSQueue array or no message received from listener_fd
+ */
+int ServeNewProcessConnection(fd_set *set, int listener_fd){
+    struct mq_attr attr;
+    uint8_t buffer[MAX_QUEUE_SIZE+1];
+    int new_mq_Proces_MOPS, new_mq_MOPS_Proces;
+    attr.mq_flags = 0;
+    attr.mq_maxmsg = 10;
+    attr.mq_msgsize = MAX_QUEUE_SIZE;
+    attr.mq_curmsgs = 0;
+    memset(buffer, 0, MAX_QUEUE_SIZE+1);
+
+    if(mq_receive(listener_fd, buffer, MAX_QUEUE_SIZE, NULL) > 0){
+		new_mq_Proces_MOPS = mq_open(buffer, O_CREAT | O_RDONLY, 0644, &attr);
+		if( !((mqd_t)-1 != new_mq_Proces_MOPS) )
+			perror("MQueue Open Proces_MOPS");
+		new_mq_MOPS_Proces = mq_open(buffer, O_WRONLY);
+		if( !((mqd_t)-1 != new_mq_MOPS_Proces) )
+			perror("MQueue Open MOPS_Proces");
+
+		if (AddToMOPSQueue(new_mq_MOPS_Proces, new_mq_Proces_MOPS) >= 0){
+			FD_SET(new_mq_Proces_MOPS, set);
+			printf("Nowy deskryptor: %d, nazwa kolejki: %s \n", new_mq_Proces_MOPS, buffer);
+			return new_mq_Proces_MOPS;
+		}
     }
+    return -1;
 }
 #endif //TARGET_DEVICE == Linux
+
+
+//TODO
 #if TARGET_DEVICE == RTnode
 void InitProcesConnection(){
 
@@ -356,106 +424,74 @@ void InitProcesConnection(){
 }
 #endif //TARGET_DEVICE == RTnode
 
-/*
- * int main(void)
-{
-    int t, len, i, rv, nbytes;
-    struct sockaddr_un local, remote;
-    int inputWrittenIndex = 0, outpuWrittenIndex = 0;
-    int free_space;
-    int licznik = 0;
-    fd_set master;  //master fd list
-    fd_set read_fd; //temp fd list for select()
-	int fdmax;		//maximum fd number
-	int listener;   //listening socket descriptor
-	int newfd;		//newly accept()ed socket descriptor
-	memset(input_buffer, 0, sizeof(input_buffer));
-	memset(output_buffer, 0, sizeof(output_buffer));
-    if ((listener = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-        perror("socket");
-        exit(1);
-    }
-    local.sun_family = AF_UNIX;
-    strcpy(local.sun_path, SOCK_PATH);
-    unlink(local.sun_path);
-    len = strlen(local.sun_path) + sizeof(local.sun_family);
-    if (bind(listener, (struct sockaddr *)&local, len) == -1) {
-        perror("bind");
-        exit(1);
-    }
-    if (listen(listener, 5) == -1) {
-        perror("listen");
-        exit(1);
-    }
-	FD_ZERO(&master);
-	FD_ZERO(&read_fd);
-    //add listener to the master set
-    FD_SET(listener, &master);
-    fdmax = listener;
-    for(;;){
-    	free_space = sizeof(input_buffer)-(inputWrittenIndex*sizeof(input_buffer[0]));
-    	tv.tv_sec = 0;
-        tv.tv_usec = 10000;
-    	read_fd = master;
-    	if( free_space <= sizeof(input_buffer)/10 )
-    		rv = 0;		//go to "idle state"
-		else{
-			if((rv = select(fdmax+1, &read_fd, NULL, NULL, &tv)) == -1){
-				perror("select");
-				exit(4);
-			}
-		}
-    	if(rv > 0){
-			for(i = 0; i <=fdmax; i++){
-				if (FD_ISSET(i, &read_fd)){
-					if(i == listener){
-						t = sizeof(remote);
-						newfd = accept(listener,(struct sockaddr *)&remote, &t);
-						if(newfd == -1){
-							perror("accept");
-						}
-						else{
-							FD_SET(newfd, &master);
-							if(newfd > fdmax)
-								fdmax = newfd;
-							printf("Nowy deskryptor: %d \n", newfd);
-						}
-					}
-					else{
-						//here we get data from sub_processes or from RTnet
-						printf("Space: %d \n", free_space);
-						//add new packet to the end of all data
-						nbytes = recv(i, input_buffer+inputWrittenIndex, free_space, 0);
 
-						if ( nbytes <= 0 ){
-							close(i);
-							FD_CLR(i, &master);
-						}
-						else{
-							if (free_space >= ( nbytes + sizeof( (uint8_t) i )) ){
-								AddClientIDToPacket(input_buffer+inputWrittenIndex, (uint8_t) i,  &inputWrittenIndex, nbytes);
-								inputWrittenIndex += nbytes;
-								licznik += 1 ;
-							}
-							//we need to erase memory which is too small to send data (the last packet)
-							else{
-								memset(input_buffer+inputWrittenIndex, 0, free_space);
-								//better never be here!
-							}
-						}
-					}
-				}
-			}
-    	}
-    	if(rv < 0){
-    	    perror("select"); // error occurred in select()
-    	}
-    	if(rv == 0){
-            //here make other stuff
-    		//reorganize data,
-    		//pack everything together and wait for time slot to send everything to RTnet
-    	}
-    }
-    return 0;
+void AnalizeProcessMessage(uint8_t *buffer, int bytes_wrote){
+	FixedHeader FHeader;
+	memcpy(&FHeader, buffer, sizeof(FHeader));
+
+	switch(FHeader.MessageType){
+	case PUBLISH:
+		ServePublishMessage(FHeader, buffer, bytes_wrote);
+		break;
+	case SUBSCRIBE:
+		break;
+	}
 }
- */
+
+void ServePublishMessage(FixedHeader FHeader, uint8_t *buffer, int bytes_wrote){
+	uint8_t topicTemp[MAX_TOPIC_LENGTH+1], messageTemp[MAX_MESSAGE_LENGTH+1], QoS;
+	uint16_t FrameLen, TopicLen, MessageLen, index = 0;
+	int topicID;
+	memset(topicTemp, 0, MAX_TOPIC_LENGTH+1);
+	memset(messageTemp, 0, MAX_MESSAGE_LENGTH+1);
+
+	FrameLen = MSBandLSBTou16(FHeader.RemainingLengthMSB, FHeader.RemainingLengthLSB);
+	QoS = (FHeader.Flags & 6) >> 1;
+	index+=3;
+	TopicLen = MSBandLSBTou16(buffer[index], buffer[index+1]);
+	index+=2;
+	memcpy(topicTemp, buffer+index, TopicLen);
+	index+=TopicLen;
+
+	if(QoS==0){
+		MessageLen = MSBandLSBTou16(buffer[index], buffer[index+1]);
+		index+=2;
+		memcpy(messageTemp, buffer+index, MessageLen);
+	}
+	else{
+		index+=2;
+		MessageLen = MSBandLSBTou16(buffer[index], buffer[index+1]);
+		index+=2;
+		memcpy(messageTemp, buffer+index, MessageLen);
+	}
+	printf("Topic: %s, Message: %s\n",topicTemp, messageTemp);
+	topicID = GetIDfromTopicName(topicTemp, TopicLen);
+	switch(topicID){
+	case -1:
+		AddTopicCandidate(topicTemp, TopicLen);
+		PrintfList(list);
+		//AddPacketToWaitingTab();
+		break;
+	case 0:
+		//AddPacketToWaitingTab();
+		break;
+	default:
+		AddPacketToFinalTab(, );
+		break;
+	}
+}
+
+void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB){
+	uint16_t temp;
+	*LSB = (uint8_t) u16bit;
+	temp = u16bit>>8;
+	*MSB = (uint8_t) temp;
+}
+
+uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB){
+	uint16_t temp;
+	temp = MSB;
+	temp = temp<<8;
+	temp += LSB;
+	return temp;
+}

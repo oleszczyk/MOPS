@@ -11,7 +11,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <mqueue.h>
 #include "MOPS_RTnet_Con.h"
+#include "MQTT.h"
 
 
 typedef struct TopicID{
@@ -33,16 +35,21 @@ enum MOPS_STATE{
 
 
 #if TARGET_DEVICE == Linux
-#define SOCK_PATH "./../MOPS_path"
+#define QUEUE_NAME "/MOPS_path"
+#define MAX_PROCES_CONNECTION 10
+#define MAX_QUEUE_SIZE 100
+
+typedef struct MOPS_Queue{
+	mqd_t  	ProcesToMOPS_fd;
+	mqd_t  	MOPSToProces_fd;
+}MOPS_Queue;
 #endif //TARGET_DEVICE == Linux
 
 #if TARGET_DEVICE == RTnode
-#define MAX_PROCES_CONNECTION 3 //number of local processes connected to MOPS broker
+#define MAX_PROCES_CONNECTION 10 //number of local processes connected to MOPS broker
+typedef struct MOPS_Queue{
 
-typedef struct RTnodeSocket{
-	QueueHandle_t  	ProcesToMOPS;
-	QueueHandle_t  	MOPSToProces;
-}RTnodeSocket;
+}MOPS_Queue;
 #endif //TARGET_DEVICE == RTnode
 
 
@@ -79,5 +86,14 @@ int GetIDfromTopicName(uint8_t *topic, uint16_t topicLen);
 void GetTopicNameFromID(uint16_t id, uint8_t *topic, uint16_t topicLen);
 
 void InitProcesConnection();
+int AddToMOPSQueue(int MOPS_Proces_fd, int Proces_MOPS_fd);
+void MOPS_QueueInit(MOPS_Queue *queue);
+
+
+void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);
+uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB);
+
+void ServePublishMessage(FixedHeader FHeader, uint8_t *buffer, int bytes_wrote);
+
 
 #endif /* MOPS_H_ */
