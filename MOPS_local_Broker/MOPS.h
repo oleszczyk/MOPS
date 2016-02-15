@@ -60,11 +60,14 @@ void threadRecvFromProcess(int socket);
 
 void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes);
 void InitTopicList(TopicID list[]);
+
+uint16_t SendEmptyMessage(uint8_t *Buffer, int BufferLen);
+uint16_t SendTopicRequestMessage(uint8_t *Buffer, int BufferLen);
 uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]);
 uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]);
 
 uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16_t id);
-void AnalizeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen);
+void AnalyzeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen);
 void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen);
 uint8_t ApplyIDtoNewTopics();
 
@@ -93,7 +96,8 @@ void MOPS_QueueInit(MOPS_Queue *queue);
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);
 uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB);
 
-void ServePublishMessage(FixedHeader FHeader, uint8_t *buffer, int bytes_wrote);
-
+void ServePublishMessage(uint8_t *buffer, int FrameLen);
+void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen);
+void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID);
 
 #endif /* MOPS_H_ */

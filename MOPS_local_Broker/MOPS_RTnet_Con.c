@@ -127,13 +127,6 @@ uint16_t buildTopicRequestMessage(uint8_t *Buffer, int BufferLen){
 	MOPSHeader MHeader;
 	uint8_t index = 0, tempLen = 0;
 
-	//Check if all data can be stored in Message buffer
-	tempLen += sizeof(MHeader);
-	if (tempLen > BufferLen)
-		return 0;
-	tempLen = 0;
-	//**************************************************
-
 	MHeader.MOPSMessageType = TOPIC_REQUEST;
 	MHeader.RemainingLengthLSB = 0;
 	MHeader.RemainingLengthMSB = 0;
@@ -148,15 +141,6 @@ uint16_t buildNewTopicMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topics, 
 	MOPSHeader MHeader;
 	uint8_t MSB_temp, LSB_temp;
 	int index = 0, tempLen = 0, i;
-
-	//Check if all data can be stored in Message buffer
-	tempLen += sizeof(MHeader);
-	for (i=0; i<TopicNo; i++)
-		tempLen += 2 + 2 + strlen(Topics[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
-	if (tempLen > BufferLen)
-		return 0;
-	tempLen = 0;
-	//**************************************************
 	index = sizeof(MHeader);
 
 	//**** Payload part *****//
@@ -187,13 +171,6 @@ uint16_t buildNewTopicMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topics, 
 uint16_t buildEmptyMessage(uint8_t *Buffer, int BufferLen){
 	MOPSHeader MHeader;
 	uint8_t index = 0, tempLen = 0;
-
-	//Check if all data can be stored in Message buffer
-	tempLen += sizeof(MHeader);
-	if (tempLen > BufferLen)
-		return 0;
-	tempLen = 0;
-	//**************************************************
 
 	MHeader.MOPSMessageType = NOTHING;
 	MHeader.RemainingLengthLSB = 0;

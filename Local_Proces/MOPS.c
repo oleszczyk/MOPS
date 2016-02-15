@@ -84,9 +84,9 @@ int recvFromMOPS(int fd, uint8_t *buffer, uint16_t buffLen){}
 void publishMOPS(int fd, uint8_t *Topic, uint8_t *Message){
 	static uint8_t buffer[100];
 	memset(buffer, 0, sizeof(buffer));
-	uint16_t packetID;
-	BuildClientPublishMessage(buffer, sizeof(buffer), Topic, Message, 0, 0, &packetID);
-    if (sendToMOPS(buffer, sizeof(buffer)) == -1) {
+	uint16_t packetID, written;
+	written = BuildClientPublishMessage(buffer, sizeof(buffer), Topic, Message, 0, 0, &packetID);
+    if (sendToMOPS(buffer, written) == -1) {
         perror("send");
     }
 }

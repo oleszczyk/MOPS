@@ -20,8 +20,8 @@ int main(void)
 	subscribeMOPS(topic, Qos);
 
 	for(;;){
-	    sleep(2);
-		publishMOPS(s, "Cos5", "Message");
+	    sleep(1);
+		publishMOPS(s, "nikt", "Bleble");
 	}
     //close(s);
     return 0;

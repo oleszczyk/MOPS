@@ -22,6 +22,7 @@
 static uint8_t MOPS_State = SEND_REQUEST;
 uint8_t input_buffer[UDP_MAX_SIZE], output_buffer[UDP_MAX_SIZE], waiting_output_buffer[UDP_MAX_SIZE];
 uint16_t writtenBytes = 0, output_index = 0, waiting_output_index = 0;
+
 TopicID list[MAX_NUMBER_OF_TOPIC];
 SubscriberList SubList[MAX_NUMBER_OF_SUBSCRIPTIONS];
 MOPS_Queue mops_queue[MAX_PROCES_CONNECTION];
@@ -39,6 +40,7 @@ int main(void)
 	int RTsocket = 0;
 	mutex_init(&input_lock);
 	mutex_init(&output_lock);
+	mutex_init(&waiting_output_lock);
 
 	InitTopicList(list);
 	MOPS_QueueInit(mops_queue);
@@ -64,15 +66,15 @@ void threadRecvFromRTnet(int RTsocket){
     for(;;){
     	lock_mutex(&input_lock);
 		receiveFromRTnet(RTsocket, input_buffer, UDP_MAX_SIZE);
-		AnalizeIncomingUDP(input_buffer, UDP_MAX_SIZE);
+		AnalyzeIncomingUDP(input_buffer, UDP_MAX_SIZE);
 		unlock_mutex(&input_lock);
     }
 }
 
 void threadSendToRTnet(int RTsocket){
+	uint16_t written_bytes = 0;
 	for(;;){
 		sleep(2);  // slot czasowy
-		lock_mutex(&output_lock);
 
 		switch(MOPS_State){
 		case SEND_NOTHING:
@@ -80,19 +82,21 @@ void threadSendToRTnet(int RTsocket){
 			//if yes, then add them to head of message and update TopicList - reset LocalTopic flag
 			//else, send 'nothing'
 			if( ApplyIDtoNewTopics() )
-				output_index += SendLocalTopics(output_buffer, UDP_MAX_SIZE, list);
+				written_bytes = SendLocalTopics(output_buffer, UDP_MAX_SIZE, list);
 			else
-				output_index += buildEmptyMessage(output_buffer, UDP_MAX_SIZE);
+				written_bytes = SendEmptyMessage(output_buffer, UDP_MAX_SIZE);
 			break;
 		case SEND_REQUEST:
-			output_index += buildTopicRequestMessage(output_buffer, UDP_MAX_SIZE);
+			written_bytes = SendTopicRequestMessage(output_buffer, UDP_MAX_SIZE);
 			break;
 		case SEND_TOPIC_LIST:
 			ApplyIDtoNewTopics();
-			output_index += SendTopicList(output_buffer, UDP_MAX_SIZE, list);
+			written_bytes = SendTopicList(output_buffer, UDP_MAX_SIZE, list);
 			break;
 		}
 
+		lock_mutex(&output_lock);
+		output_index += written_bytes;
 		if (output_index > 0){
 			sendToRTnet(RTsocket, output_buffer, output_index);
 			MOPS_State = SEND_NOTHING;
@@ -103,12 +107,38 @@ void threadSendToRTnet(int RTsocket){
 	}
 }
 
+uint16_t SendEmptyMessage(uint8_t *Buffer, int BufferLen){
+	uint8_t tempLen = 0;
+	tempLen += sizeof(MOPSHeader);
+	if ( tempLen > (BufferLen-output_index) )
+		printf("Not enough space to send Empy Header\n");
+
+	lock_mutex(&output_lock);
+	memmove(Buffer+tempLen, Buffer, output_index); //Move all existing data
+	writtenBytes = buildEmptyMessage(Buffer, BufferLen-output_index);
+	unlock_mutex(&output_lock);
+	return writtenBytes;
+}
+
+uint16_t SendTopicRequestMessage(uint8_t *Buffer, int BufferLen){
+	uint8_t tempLen = 0;
+	tempLen += sizeof(MOPSHeader);
+	if ( tempLen > (BufferLen-output_index) )
+		printf("Not enough space to send Topic Request\n");
+
+	lock_mutex(&output_lock);
+	memmove(Buffer+tempLen, Buffer, output_index); //Move all existing data
+	writtenBytes = buildTopicRequestMessage(Buffer, BufferLen-output_index);
+	unlock_mutex(&output_lock);
+	return writtenBytes;
+}
+
 /*
  * Sending all available (not candidate) topics to RTnet,
  * after that local topics become global.
  */
 uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
-	int i = 0, counter = 0;
+	int i = 0, counter = 0, tempLen;
 	uint8_t *tempTopicList[MAX_NUMBER_OF_TOPIC];
 	uint16_t tempTopicIDs[MAX_NUMBER_OF_TOPIC];
 	uint16_t writtenBytes;
@@ -122,7 +152,16 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
 			counter++;
 		}
 	}
-	writtenBytes = buildNewTopicMessage(Buffer, BufferLen, tempTopicList, tempTopicIDs, counter);
+	tempLen = sizeof(MOPSHeader);
+	for (i=0; i<counter; i++)
+		tempLen += 2 + 2 + strlen(tempTopicList[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
+	if ( tempLen > (BufferLen-output_index) )
+		printf("Not enough space to send all Topics from list\n");
+
+	lock_mutex(&output_lock);
+	memmove(Buffer+tempLen, Buffer, output_index); //Move all existing data
+	writtenBytes = buildNewTopicMessage(Buffer, BufferLen-output_index, tempTopicList, tempTopicIDs, counter);
+	unlock_mutex(&output_lock);
 	return writtenBytes;
 }
 
@@ -131,7 +170,7 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
  * after that local topics become global.
  */
 uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]){
-	int i = 0, counter = 0;
+	int i = 0, counter = 0, tempLen;
 	uint8_t *tempTopicList[MAX_NUMBER_OF_TOPIC];
 	uint16_t tempTopicIDs[MAX_NUMBER_OF_TOPIC];
 	uint16_t writtenBytes;
@@ -144,7 +183,17 @@ uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]){
 			counter++;
 		}
 	}
-	writtenBytes = buildNewTopicMessage(Buffer, BufferLen, tempTopicList, tempTopicIDs, counter);
+
+	tempLen = sizeof(MOPSHeader);
+	for (i=0; i<counter; i++)
+		tempLen += 2 + 2 + strlen(tempTopicList[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
+	if ( tempLen > (BufferLen-output_index) )
+		printf("Not enough space to send local Topics from list\n");
+
+	lock_mutex(&output_lock);
+	memmove(Buffer+tempLen, Buffer, output_index); //Move all existing data
+	writtenBytes = buildNewTopicMessage(Buffer, BufferLen-output_index, tempTopicList, tempTopicIDs, counter);
+	unlock_mutex(&output_lock);
 	return writtenBytes;
 }
 
@@ -185,6 +234,7 @@ uint8_t ApplyIDtoNewTopics(){
 	uint8_t localTopicFlag = 0;
 	uint16_t max = 0;
 
+	lock_mutex(&output_lock);
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
 		if(list[i].ID > max)
 			max = list[i].ID;
@@ -197,6 +247,7 @@ uint8_t ApplyIDtoNewTopics(){
 			localTopicFlag = 1;
 		}
 	}
+	unlock_mutex(&output_lock);
 	return localTopicFlag;
 }
 
@@ -264,7 +315,7 @@ void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int 
 	(*WrittenBytes) += sizeof(ClientID);
 }
 
-void AnalizeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen){
+void AnalyzeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen){
 	MOPSHeader MHeader;
 	memcpy(&MHeader, Buffer, sizeof(MHeader));
 
@@ -283,6 +334,8 @@ void AnalizeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen){
 		//do not change state
 		break;
 	}
+	//TODO
+	//After that analyze incoming frames from local processes
 }
 
 void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen){
@@ -372,7 +425,8 @@ int ReceiveFromProcess(int file_de){
     uint8_t temp[MAX_QUEUE_SIZE+1];
 
 	bytes_read = mq_receive(file_de, temp, MAX_QUEUE_SIZE, NULL);
-	AnalizeProcessMessage(temp, bytes_read);
+	if(bytes_read>=sizeof(FixedHeader))
+		AnalizeProcessMessage(temp, bytes_read);
 	return 0;
 }
 
@@ -427,58 +481,90 @@ void InitProcesConnection(){
 
 void AnalizeProcessMessage(uint8_t *buffer, int bytes_wrote){
 	FixedHeader FHeader;
-	memcpy(&FHeader, buffer, sizeof(FHeader));
+	uint8_t HeadLen = 0;
+	uint16_t FrameLen = 0, OldFrameLen = 0;
+	HeadLen = sizeof(FHeader);
 
-	switch(FHeader.MessageType){
-	case PUBLISH:
-		ServePublishMessage(FHeader, buffer, bytes_wrote);
-		break;
-	case SUBSCRIBE:
-		break;
+	memcpy(&FHeader, buffer + FrameLen, HeadLen);
+	FrameLen += MSBandLSBTou16(FHeader.RemainingLengthMSB, FHeader.RemainingLengthLSB) + HeadLen;
+	while(FHeader.MessageType!=0 && FrameLen<=bytes_wrote)
+	{
+		switch(FHeader.MessageType){
+		case PUBLISH:
+			ServePublishMessage(buffer+OldFrameLen, FrameLen);
+			break;
+		case SUBSCRIBE:
+			//TODO
+			break;
+		}
+		memcpy(&FHeader, buffer + FrameLen, HeadLen);
+		OldFrameLen = FrameLen;
+		FrameLen += MSBandLSBTou16(FHeader.RemainingLengthMSB, FHeader.RemainingLengthLSB) + HeadLen;
 	}
 }
 
-void ServePublishMessage(FixedHeader FHeader, uint8_t *buffer, int bytes_wrote){
-	uint8_t topicTemp[MAX_TOPIC_LENGTH+1], messageTemp[MAX_MESSAGE_LENGTH+1], QoS;
-	uint16_t FrameLen, TopicLen, MessageLen, index = 0;
+void ServePublishMessage(uint8_t *buffer, int FrameLen){
+	uint8_t topicTemp[MAX_TOPIC_LENGTH+1];
+	uint16_t TopicLen, index = 0;
 	int topicID;
 	memset(topicTemp, 0, MAX_TOPIC_LENGTH+1);
-	memset(messageTemp, 0, MAX_MESSAGE_LENGTH+1);
 
-	FrameLen = MSBandLSBTou16(FHeader.RemainingLengthMSB, FHeader.RemainingLengthLSB);
-	QoS = (FHeader.Flags & 6) >> 1;
 	index+=3;
 	TopicLen = MSBandLSBTou16(buffer[index], buffer[index+1]);
 	index+=2;
 	memcpy(topicTemp, buffer+index, TopicLen);
 	index+=TopicLen;
 
-	if(QoS==0){
-		MessageLen = MSBandLSBTou16(buffer[index], buffer[index+1]);
-		index+=2;
-		memcpy(messageTemp, buffer+index, MessageLen);
-	}
-	else{
-		index+=2;
-		MessageLen = MSBandLSBTou16(buffer[index], buffer[index+1]);
-		index+=2;
-		memcpy(messageTemp, buffer+index, MessageLen);
-	}
-	printf("Topic: %s, Message: %s\n",topicTemp, messageTemp);
 	topicID = GetIDfromTopicName(topicTemp, TopicLen);
 	switch(topicID){
 	case -1:
 		AddTopicCandidate(topicTemp, TopicLen);
 		PrintfList(list);
-		//AddPacketToWaitingTab();
+		AddPacketToWaitingTab(buffer, FrameLen);
 		break;
 	case 0:
-		//AddPacketToWaitingTab();
+		AddPacketToWaitingTab(buffer, FrameLen);
 		break;
 	default:
-		AddPacketToFinalTab(, );
+		AddPacketToFinalTab(buffer, FrameLen, topicID);
 		break;
 	}
+}
+
+void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen){
+	lock_mutex(&waiting_output_lock);
+	memcpy(waiting_output_buffer+waiting_output_index, buffer, FrameLen);
+	waiting_output_index += FrameLen;
+	unlock_mutex(&waiting_output_lock);
+}
+
+void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID){
+	uint8_t tempBuff[MAX_QUEUE_SIZE];
+	uint8_t MSBtemp, LSBtemp, headLen, index = 0;
+	uint16_t TopicLen, MessageLen;
+	memset(tempBuff,0,MAX_QUEUE_SIZE);
+
+	headLen = sizeof(FixedHeader);
+	u16ToMSBandLSB(topicID, &MSBtemp, &LSBtemp);
+	memcpy(tempBuff, buffer, headLen);
+	MessageLen = MSBandLSBTou16(buffer[1], buffer[2]);
+
+	tempBuff[ headLen ] = MSBtemp;
+	tempBuff[headLen+1] = LSBtemp;
+	index = headLen+2;
+
+	TopicLen = MSBandLSBTou16(buffer[headLen], buffer[headLen+1]);
+	MessageLen = MessageLen - TopicLen;
+	u16ToMSBandLSB(MessageLen, &MSBtemp, &LSBtemp);
+	tempBuff[1] = MSBtemp; //New message len MSB
+	tempBuff[2] = LSBtemp; //New message len LSB
+
+	memcpy( tempBuff+index, buffer+index+TopicLen, FrameLen-(index+TopicLen) );
+
+	lock_mutex(&output_lock);
+	memcpy(output_buffer+output_index, tempBuff, FrameLen-TopicLen);
+	output_index += (FrameLen-TopicLen);
+	unlock_mutex(&output_lock);
 }
 
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB){
