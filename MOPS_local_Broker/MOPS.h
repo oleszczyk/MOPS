@@ -91,13 +91,18 @@ void GetTopicNameFromID(uint16_t id, uint8_t *topic, uint16_t topicLen);
 void InitProcesConnection();
 int AddToMOPSQueue(int MOPS_Proces_fd, int Proces_MOPS_fd);
 void MOPS_QueueInit(MOPS_Queue *queue);
+int AddToSubscribersList(uint8_t *topic, uint16_t topicLen, int ClientID);
+int FindClientIDbyFileDesc(int file_de);
 
 
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);
 uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB);
 
+void AnalyzeProcessMessage(uint8_t *buffer, int bytes_wrote, int ClientID);
 void ServePublishMessage(uint8_t *buffer, int FrameLen);
+void ServeSubscribeMessage(uint8_t *buffer, int FrameLen, int ClientID);
 void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen);
 void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID);
+void MoveWaitingToFinal();
 
 #endif /* MOPS_H_ */

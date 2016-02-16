@@ -13,11 +13,11 @@
 int main(void)
 {
     int s;
-    uint8_t topic[][1]={"Topic"};
-    uint8_t Qos[][1]={1};
+    uint8_t *topic[]={"Topic", "Gowno"};
+    uint8_t Qos[]={1, 2};
 
 	s = connectMOPS();
-	subscribeMOPS(topic, Qos);
+	subscribeMOPS(topic, Qos, 2);
 
 	for(;;){
 	    sleep(1);

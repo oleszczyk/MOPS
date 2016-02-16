@@ -21,7 +21,7 @@ int sendToMOPS(uint8_t *buffer, uint16_t buffLen);
 int recvFromMOPS(uint8_t *buffer, uint16_t buffLen);
 
 void publishMOPS(int fd, uint8_t *Topic, uint8_t *Message);
-void subscribeMOPS(uint8_t **TopicList, uint8_t **QosList);
+void subscribeMOPS(uint8_t **TopicList, uint8_t *QosList, uint8_t NoOfTopics);
 int readMOPS(int fd, uint8_t *buf, uint8_t length);
 
 #if TARGET_DEVICE == Linux

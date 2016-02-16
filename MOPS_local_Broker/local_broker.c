@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/time.h>
+#include <mqueue.h>
 #include "MOPS.h"
 #include "MQTT.h"
 #include "MOPS_RTnet_Con.h"
@@ -24,7 +25,7 @@ uint8_t input_buffer[UDP_MAX_SIZE], output_buffer[UDP_MAX_SIZE], waiting_output_
 uint16_t writtenBytes = 0, output_index = 0, waiting_output_index = 0;
 
 TopicID list[MAX_NUMBER_OF_TOPIC];
-SubscriberList SubList[MAX_NUMBER_OF_SUBSCRIPTIONS];
+SubscriberList sub_list[MAX_NUMBER_OF_SUBSCRIPTIONS];
 MOPS_Queue mops_queue[MAX_PROCES_CONNECTION];
 
 #if TARGET_DEVICE == Linux
@@ -44,7 +45,7 @@ int main(void)
 
 	InitTopicList(list);
 	MOPS_QueueInit(mops_queue);
-
+	SubListInit(sub_list);
 	RTsocket = connectToRTnet();
 
     startNewThread(&threadSendToRTnet, (void *)RTsocket);
@@ -62,6 +63,14 @@ void MOPS_QueueInit(MOPS_Queue *queue){
 	}
 }
 
+void SubListInit(SubscriberList *sublist){
+	int i = 0;
+	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++){
+		sublist[i].ClientID = -1;
+		memset(sublist[i].Topic, 0, MAX_TOPIC_LENGTH+1);
+	}
+}
+
 void threadRecvFromRTnet(int RTsocket){
     for(;;){
     	lock_mutex(&input_lock);
@@ -73,6 +82,7 @@ void threadRecvFromRTnet(int RTsocket){
 
 void threadSendToRTnet(int RTsocket){
 	uint16_t written_bytes = 0;
+	uint8_t are_local_topics = 0;
 	for(;;){
 		sleep(2);  // slot czasowy
 
@@ -81,7 +91,9 @@ void threadSendToRTnet(int RTsocket){
 			//check if there are local topic to announce
 			//if yes, then add them to head of message and update TopicList - reset LocalTopic flag
 			//else, send 'nothing'
-			if( ApplyIDtoNewTopics() )
+			are_local_topics = ApplyIDtoNewTopics();
+			MoveWaitingToFinal();
+			if(are_local_topics)
 				written_bytes = SendLocalTopics(output_buffer, UDP_MAX_SIZE, list);
 			else
 				written_bytes = SendEmptyMessage(output_buffer, UDP_MAX_SIZE);
@@ -91,11 +103,13 @@ void threadSendToRTnet(int RTsocket){
 			break;
 		case SEND_TOPIC_LIST:
 			ApplyIDtoNewTopics();
+			MoveWaitingToFinal();
 			written_bytes = SendTopicList(output_buffer, UDP_MAX_SIZE, list);
 			break;
 		}
 
 		lock_mutex(&output_lock);
+		printf("output_index: %d, writen_head: %d\n", output_index, written_bytes);
 		output_index += written_bytes;
 		if (output_index > 0){
 			sendToRTnet(RTsocket, output_buffer, output_index);
@@ -309,6 +323,15 @@ void PrintfList(TopicID list[]){
 	printf("};\n");
 }
 
+void PrintfSubList(SubscriberList sublist[]){
+	int i;
+	printf("SubList{\n");
+	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++){
+		printf("    Topic: %s, ID: %d \n", sublist[i].Topic, sublist[i].ClientID);
+	}
+	printf("};\n");
+}
+
 void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes){
 	memmove(buf + sizeof(ClientID), buf, nbytes);
 	memcpy(buf, &ClientID, sizeof(ClientID));
@@ -421,12 +444,14 @@ void InitProcesConnection(){
 }
 
 int ReceiveFromProcess(int file_de){
-	int bytes_read;
+	int bytes_read, ClientID;
     uint8_t temp[MAX_QUEUE_SIZE+1];
 
 	bytes_read = mq_receive(file_de, temp, MAX_QUEUE_SIZE, NULL);
-	if(bytes_read>=sizeof(FixedHeader))
-		AnalizeProcessMessage(temp, bytes_read);
+	if(bytes_read>=sizeof(FixedHeader)){
+		ClientID = FindClientIDbyFileDesc(file_de);
+		AnalyzeProcessMessage(temp, bytes_read, ClientID);
+	}
 	return 0;
 }
 
@@ -478,8 +503,15 @@ void InitProcesConnection(){
 }
 #endif //TARGET_DEVICE == RTnode
 
+int FindClientIDbyFileDesc(int file_de){
+	int i = 0;
+	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++)
+		if( mops_queue[i].MOPSToProces_fd==file_de || mops_queue[i].ProcesToMOPS_fd==file_de)
+			return i;
+	return 0;
+}
 
-void AnalizeProcessMessage(uint8_t *buffer, int bytes_wrote){
+void AnalyzeProcessMessage(uint8_t *buffer, int bytes_wrote, int ClientID){
 	FixedHeader FHeader;
 	uint8_t HeadLen = 0;
 	uint16_t FrameLen = 0, OldFrameLen = 0;
@@ -491,10 +523,10 @@ void AnalizeProcessMessage(uint8_t *buffer, int bytes_wrote){
 	{
 		switch(FHeader.MessageType){
 		case PUBLISH:
-			ServePublishMessage(buffer+OldFrameLen, FrameLen);
+			ServePublishMessage(buffer+OldFrameLen, FrameLen-OldFrameLen);
 			break;
 		case SUBSCRIBE:
-			//TODO
+			ServeSubscribeMessage(buffer+OldFrameLen, FrameLen-OldFrameLen, ClientID);
 			break;
 		}
 		memcpy(&FHeader, buffer + FrameLen, HeadLen);
@@ -531,10 +563,41 @@ void ServePublishMessage(uint8_t *buffer, int FrameLen){
 	}
 }
 
+void ServeSubscribeMessage(uint8_t *buffer, int FrameLen, int ClientID){
+	uint16_t TopicLen, index = 0;
+
+	index+=5;
+	do{
+		TopicLen = MSBandLSBTou16(buffer[index], buffer[index+1]);
+		index+=2;
+		AddToSubscribersList(buffer+index, TopicLen, ClientID);
+		PrintfSubList(sub_list);
+		index+=(TopicLen+1);
+	}while(index<FrameLen);
+}
+
+int AddToSubscribersList(uint8_t *topic, uint16_t topicLen, int ClientID){
+	int i = 0;
+	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++){
+		if(sub_list[i].ClientID==ClientID && strncmp(sub_list[i].Topic, topic, topicLen)==0 && sub_list[i].Topic[0]!=0){
+			return -1;
+		}
+	}
+	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++){
+		if(sub_list[i].ClientID == -1){
+			memcpy(sub_list[i].Topic, topic, MAX_TOPIC_LENGTH);
+			sub_list[i].ClientID = ClientID;
+			return i;
+		}
+	}
+	return 0;
+}
+
 void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen){
 	lock_mutex(&waiting_output_lock);
 	memcpy(waiting_output_buffer+waiting_output_index, buffer, FrameLen);
 	waiting_output_index += FrameLen;
+	printf("Waiting index: %d\n", waiting_output_index);
 	unlock_mutex(&waiting_output_lock);
 }
 
@@ -564,7 +627,22 @@ void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID){
 	lock_mutex(&output_lock);
 	memcpy(output_buffer+output_index, tempBuff, FrameLen-TopicLen);
 	output_index += (FrameLen-TopicLen);
+	printf("Frame: %d, TopicLen: %d \n", FrameLen, TopicLen);
 	unlock_mutex(&output_lock);
+}
+
+void MoveWaitingToFinal(){
+	uint8_t tempTab[UDP_MAX_SIZE];
+	uint16_t tempIndex = 0;
+
+	lock_mutex(&waiting_output_lock);
+	memcpy(tempTab, waiting_output_buffer, waiting_output_index);
+	memset(waiting_output_buffer, 0 , UDP_MAX_SIZE);
+	tempIndex = waiting_output_index;
+	waiting_output_index = 0;
+	unlock_mutex(&waiting_output_lock);
+
+	AnalyzeProcessMessage(tempTab, tempIndex, -1);
 }
 
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB){
