@@ -112,9 +112,14 @@ void threadSendToRTnet(int RTsocket){
 
 		lock_mutex(&output_lock);
 		output_index += written_bytes;
-		if (output_index > 0){
+		if ( (output_index > sizeof(MOPSHeader)) || (output_buffer[0] == TOPIC_REQUEST) ){
+			printf("Tutaj \n");
 			sendToRTnet(RTsocket, output_buffer, output_index);
 			MOPS_State = SEND_NOTHING;
+			memset(output_buffer, 0, UDP_MAX_SIZE);
+			output_index = 0;
+		}
+		else{
 			memset(output_buffer, 0, UDP_MAX_SIZE);
 			output_index = 0;
 		}

@@ -21,7 +21,7 @@ int main(void)
 	s = connectMOPS();
 	subscribeMOPS(topic, Qos, 3);
 	for(;;){
-	    usleep(100000);
+	    usleep(1000000);
 		publishMOPS(s, "Gowno", "cos tam sle");
 		i = readMOPS(array, 100);
 
