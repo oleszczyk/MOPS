@@ -97,18 +97,60 @@ void subscribeMOPS(uint8_t **TopicList, uint8_t *QosList, uint8_t NoOfTopics){
 	memset(buffer, 0, sizeof(buffer));
 	uint16_t packetID, written;
 	written = BuildSubscribeMessage(buffer, sizeof(buffer), TopicList, QosList, NoOfTopics, &packetID);
+
     if (sendToMOPS(buffer, written) == -1) {
         perror("send");
     }
 }
 
-int readMOPS(int fd, uint8_t *buf, uint8_t length){
+int readMOPS(uint8_t *buf, uint8_t length){
+	uint8_t temp[MAX_QUEUE_SIZE];
     int t;
-	if ((t=recvFromMOPS(buf, length)) > 0) {
-		buf[t] = '\0';
+	memset(temp,0,MAX_QUEUE_SIZE);
+	memset(buf,0,length);
+
+	if ((t=recvFromMOPS(temp, MAX_QUEUE_SIZE)) > 0) {
+		return InterpretFrame(buf, temp, t);
     } else {
         if (t < 0) perror("recv");
         else printf("Server closed connection\n");
     }
     return t;
+}
+
+int InterpretFrame(uint8_t *messageBuf, uint8_t *frameBuf, uint8_t frameLen){
+	FixedHeader FHeader;
+	uint8_t Qos, topicLen, messsageLen;
+	uint16_t headLen = 0, index = 3;
+
+	headLen = sizeof(FHeader);
+	memcpy(&FHeader, frameBuf, headLen);
+	Qos = (FHeader.Flags & 6) >> 1;
+
+	topicLen = MSBandLSBTou16(frameBuf[index], frameBuf[index+1]);
+	index += (2+topicLen);
+	if(Qos > 0)
+		index += 2;
+	messsageLen = MSBandLSBTou16(frameBuf[index], frameBuf[index+1]);
+	index += 2;
+	if( (index+messsageLen) == frameLen){
+		memcpy(messageBuf, frameBuf+index, messsageLen);
+		return messsageLen;
+	}
+	return 0;
+}
+
+void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB){
+	uint16_t temp;
+	*LSB = (uint8_t) u16bit;
+	temp = u16bit>>8;
+	*MSB = (uint8_t) temp;
+}
+
+uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB){
+	uint16_t temp;
+	temp = MSB;
+	temp = temp<<8;
+	temp += LSB;
+	return temp;
 }

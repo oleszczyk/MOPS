@@ -67,8 +67,8 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]);
 uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]);
 
 uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16_t id);
-void AnalyzeIncomingUDP(uint8_t *Buffer, uint8_t BufferLen);
-void UpdateTopicList(uint8_t *Buffer, uint8_t BufferLen);
+void AnalyzeIncomingUDP(uint8_t *Buffer, int written_bytes);
+void UpdateTopicList(uint8_t *Buffer, int BufferLen);
 uint8_t ApplyIDtoNewTopics();
 
 void AddTopicCandidate(uint8_t *topic, uint16_t topicLen);
@@ -86,13 +86,18 @@ int GetIDfromTopicName(uint8_t *topic, uint16_t topicLen);
  * if there is not a topic in TopicList with that id
  * variable 'topic' is set to \0.
  */
-void GetTopicNameFromID(uint16_t id, uint8_t *topic, uint16_t topicLen);
+uint16_t GetTopicNameFromID(uint16_t id, uint8_t *topic);
 
 void InitProcesConnection();
 int AddToMOPSQueue(int MOPS_Proces_fd, int Proces_MOPS_fd);
 void MOPS_QueueInit(MOPS_Queue *queue);
 int AddToSubscribersList(uint8_t *topic, uint16_t topicLen, int ClientID);
+void PrepareFrameToSendToProcess(uint8_t *Buffer, int written_bytes);
+int ReceiveFromProcess(int file_de);
+int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de);
+int ServeSendingToProcesses();
 int FindClientIDbyFileDesc(int file_de);
+int FindClientIDbyTopic(uint8_t *topic, uint16_t topicLen);
 
 
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);

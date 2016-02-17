@@ -102,7 +102,6 @@ enum CONNACK_RETURN_CODE{
 
 //Definitions for general purposes
 void Init_FixedHeader(FixedHeader *FHeader, uint8_t MessageType, uint8_t Flags);
-void u16ToMSBandLSB(uint16_t u16, uint8_t *MSB, uint8_t *LSB);
 uint16_t ACKSimpleFunctionTemplate(uint8_t MessageType, uint8_t *Buffer, int BufferLen, uint16_t packetID);
 uint16_t VerySimpleBuildingTemplate(uint8_t MessageType, uint8_t *Buffer, int BufferLen);
 

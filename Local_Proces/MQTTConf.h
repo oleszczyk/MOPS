@@ -45,7 +45,7 @@
 *  Client Publishing settings  *
 *                              *
 *******************************/
-#define QOS  0      // 0 - 2
+#define QOS  2      // 0 - 2
 
 
 #endif /* CONFIG_H_ */

@@ -60,13 +60,6 @@ void Init_TopicName(TopicName *TName, uint8_t *Topic){
 	TName->Topic = Topic;
 }
 
-void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB){
-	uint16_t temp;
-	*LSB = (uint8_t) u16bit;
-	temp = u16bit>>8;
-	*MSB = (uint8_t) temp;
-}
-
 
 /* Function return length of applied bytes.
  */

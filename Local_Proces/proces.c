@@ -13,15 +13,20 @@
 int main(void)
 {
     int s;
-    uint8_t *topic[]={"Topic", "Gowno"};
-    uint8_t Qos[]={1, 2};
+    int i;
+    uint8_t array[100];
+    uint8_t *topic[]={"TopicTopicTopic", "Gowno", "niktktosnikt"};
+    uint8_t Qos[]={1, 2, 1};
 
 	s = connectMOPS();
-	subscribeMOPS(topic, Qos, 2);
-
+	subscribeMOPS(topic, Qos, 3);
 	for(;;){
-	    sleep(1);
-		publishMOPS(s, "nikt", "Bleble");
+	    usleep(100000);
+		publishMOPS(s, "Gowno", "cos tam sle");
+		i = readMOPS(array, 100);
+
+		printf("dlugosc: %d, %s\n",i, array);
+
 	}
     //close(s);
     return 0;

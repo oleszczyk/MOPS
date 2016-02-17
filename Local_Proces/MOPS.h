@@ -22,7 +22,11 @@ int recvFromMOPS(uint8_t *buffer, uint16_t buffLen);
 
 void publishMOPS(int fd, uint8_t *Topic, uint8_t *Message);
 void subscribeMOPS(uint8_t **TopicList, uint8_t *QosList, uint8_t NoOfTopics);
-int readMOPS(int fd, uint8_t *buf, uint8_t length);
+int readMOPS(uint8_t *buf, uint8_t length);
+int InterpretFrame(uint8_t *messageBuf, uint8_t *frameBuf, uint8_t frameLen);
+
+void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);
+uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB);
 
 #if TARGET_DEVICE == Linux
 #define QUEUE_NAME "/MOPS_path"
