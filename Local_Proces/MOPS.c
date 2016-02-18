@@ -26,6 +26,7 @@ static MOPS_Queue mops_queue;
 
 #if TARGET_DEVICE == Linux
 int connectMOPS(){
+	uint8_t temp;
     mqd_t mq;
     struct mq_attr attr;
     char buffer[10] = {'/',0,0,0,0,0,0,0,0,0};
@@ -38,17 +39,22 @@ int connectMOPS(){
     mq = mq_open(QUEUE_NAME, O_WRONLY);
     if( !((mqd_t)-1 != mq) )
     	perror("MQueue Open");
+
+	temp = strlen(buffer);
+	buffer[temp] = 'a';
+    mops_queue.MOPSToProces_fd = mq_open(buffer, O_CREAT | O_RDONLY, 0644, &attr);
+    if( !((mqd_t)-1 != mops_queue.MOPSToProces_fd) )
+    	perror("MQueue Open MOPSToProces");
+	buffer[temp] = 'b';
+    mops_queue.ProcesToMOPS_fd = mq_open(buffer, O_CREAT | O_WRONLY, 0644, &attr);
+    if( !((mqd_t)-1 != mops_queue.ProcesToMOPS_fd) )
+    	perror("MQueue Open ProcesToMOPS");
+
+    buffer[temp] = 0;
     if( !(0 <= mq_send(mq, buffer, 10, 0)) )
     	perror("Send MQueue");
     if( !((mqd_t)-1 != mq_close(mq)) )
     	perror("Close MQueue");
-
-    mops_queue.MOPSToProces_fd = mq_open(buffer, O_CREAT | O_RDONLY, 0644, &attr);
-    if( !((mqd_t)-1 != mops_queue.MOPSToProces_fd) )
-    	perror("MQueue Open MOPSToProces");
-    mops_queue.ProcesToMOPS_fd = mq_open(buffer, O_WRONLY);
-    if( !((mqd_t)-1 != mops_queue.ProcesToMOPS_fd) )
-    	perror("MQueue Open ProcesToMOPS");
 
     return 0;
 }

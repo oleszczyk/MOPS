@@ -86,7 +86,7 @@ void threadSendToRTnet(int RTsocket){
 	uint16_t written_bytes = 0;
 	uint8_t are_local_topics = 0;
 	for(;;){
-		usleep(100000);  // slot czasowy
+		usleep(100);  // slot czasowy
 
 		switch(MOPS_State){
 		case SEND_NOTHING:
@@ -113,7 +113,6 @@ void threadSendToRTnet(int RTsocket){
 		lock_mutex(&output_lock);
 		output_index += written_bytes;
 		if ( (output_index > sizeof(MOPSHeader)) || (output_buffer[0] == TOPIC_REQUEST) ){
-			printf("Tutaj \n");
 			sendToRTnet(RTsocket, output_buffer, output_index);
 			MOPS_State = SEND_NOTHING;
 			memset(output_buffer, 0, UDP_MAX_SIZE);
@@ -492,7 +491,7 @@ int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de){
  */
 int ServeNewProcessConnection(fd_set *set, int listener_fd){
     struct mq_attr attr;
-    uint8_t buffer[MAX_QUEUE_SIZE+1];
+    uint8_t buffer[MAX_QUEUE_SIZE+1], temp;
     int new_mq_Proces_MOPS, new_mq_MOPS_Proces;
     attr.mq_flags = 0;
     attr.mq_maxmsg = 10;
@@ -501,9 +500,13 @@ int ServeNewProcessConnection(fd_set *set, int listener_fd){
     memset(buffer, 0, MAX_QUEUE_SIZE+1);
 
     if(mq_receive(listener_fd, buffer, MAX_QUEUE_SIZE, NULL) > 0){
-		new_mq_Proces_MOPS = mq_open(buffer, O_CREAT | O_RDONLY, 0644, &attr);
+    	temp = strlen(buffer);
+    	buffer[temp] = 'b';
+    	new_mq_Proces_MOPS = mq_open(buffer, O_RDONLY);
 		if( !((mqd_t)-1 != new_mq_Proces_MOPS) )
 			perror("MQueue Open Proces_MOPS");
+
+    	buffer[temp] = 'a';
 		new_mq_MOPS_Proces = mq_open(buffer, O_WRONLY);
 		if( !((mqd_t)-1 != new_mq_MOPS_Proces) )
 			perror("MQueue Open MOPS_Proces");
