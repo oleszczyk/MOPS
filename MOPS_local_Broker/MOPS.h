@@ -61,10 +61,10 @@ void threadRecvFromProcess(int socket);
 void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes);
 void InitTopicList(TopicID list[]);
 
-uint16_t SendEmptyMessage(uint8_t *Buffer, int BufferLen);
-uint16_t SendTopicRequestMessage(uint8_t *Buffer, int BufferLen);
-uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]);
-uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]);
+uint16_t SendEmptyMessage();
+uint16_t SendTopicRequestMessage();
+uint16_t SendTopicList(TopicID list[]);
+uint16_t SendLocalTopics(TopicID list[]);
 
 uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16_t id);
 void AnalyzeIncomingUDP(uint8_t *Buffer, int written_bytes);

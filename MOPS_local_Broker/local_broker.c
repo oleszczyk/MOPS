@@ -83,10 +83,9 @@ void threadRecvFromRTnet(int RTsocket){
 }
 
 void threadSendToRTnet(int RTsocket){
-	uint16_t written_bytes = 0;
 	uint8_t are_local_topics = 0;
 	for(;;){
-		usleep(100);  // slot czasowy
+		usleep(10);  // slot czasowy
 
 		switch(MOPS_State){
 		case SEND_NOTHING:
@@ -96,60 +95,58 @@ void threadSendToRTnet(int RTsocket){
 			are_local_topics = ApplyIDtoNewTopics();
 			MoveWaitingToFinal();
 			if(are_local_topics)
-				written_bytes = SendLocalTopics(output_buffer, UDP_MAX_SIZE, list);
+				SendLocalTopics(list);
 			else
-				written_bytes = SendEmptyMessage(output_buffer, UDP_MAX_SIZE);
+				SendEmptyMessage();
 			break;
 		case SEND_REQUEST:
-			written_bytes = SendTopicRequestMessage(output_buffer, UDP_MAX_SIZE);
+			SendTopicRequestMessage();
 			break;
 		case SEND_TOPIC_LIST:
 			ApplyIDtoNewTopics();
 			MoveWaitingToFinal();
-			written_bytes = SendTopicList(output_buffer, UDP_MAX_SIZE, list);
+			SendTopicList(list);
 			break;
 		}
 
 		lock_mutex(&output_lock);
-		output_index += written_bytes;
 		if ( (output_index > sizeof(MOPSHeader)) || (output_buffer[0] == TOPIC_REQUEST) ){
 			sendToRTnet(RTsocket, output_buffer, output_index);
 			MOPS_State = SEND_NOTHING;
-			memset(output_buffer, 0, UDP_MAX_SIZE);
-			output_index = 0;
 		}
-		else{
-			memset(output_buffer, 0, UDP_MAX_SIZE);
-			output_index = 0;
-		}
+		memset(output_buffer, 0, UDP_MAX_SIZE);
+		output_index = 0;
+
 		unlock_mutex(&output_lock);
 	}
 }
 
-uint16_t SendEmptyMessage(uint8_t *Buffer, int BufferLen){
+uint16_t SendEmptyMessage(){
 	uint8_t tempLen = 0;
 	uint16_t writtenBytes = 0;
 	tempLen += sizeof(MOPSHeader);
-	if ( tempLen > (BufferLen-output_index) )
+	if ( tempLen > (UDP_MAX_SIZE-output_index) )
 		printf("Not enough space to send Empty Header\n");
 
 	lock_mutex(&output_lock);
-	memmove(Buffer+tempLen, Buffer, output_index); //Move all existing data
-	writtenBytes = buildEmptyMessage(Buffer, BufferLen-output_index);
+	memmove(output_buffer+tempLen, output_buffer, output_index); //Move all existing data
+	writtenBytes = buildEmptyMessage(output_buffer, UDP_MAX_SIZE-output_index);
+	output_index += writtenBytes;
 	unlock_mutex(&output_lock);
 	return writtenBytes;
 }
 
-uint16_t SendTopicRequestMessage(uint8_t *Buffer, int BufferLen){
+uint16_t SendTopicRequestMessage(){
 	uint8_t tempLen = 0;
 	uint16_t writtenBytes = 0;
 	tempLen += sizeof(MOPSHeader);
-	if ( tempLen > (BufferLen-output_index) )
+	if ( tempLen > (UDP_MAX_SIZE-output_index) )
 		printf("Not enough space to send Topic Request\n");
 
 	lock_mutex(&output_lock);
-	memmove(Buffer+tempLen, Buffer, output_index); //Move all existing data
-	writtenBytes = buildTopicRequestMessage(Buffer, BufferLen-output_index);
+	memmove(output_buffer+tempLen, output_buffer, output_index); //Move all existing data
+	writtenBytes = buildTopicRequestMessage(output_buffer, UDP_MAX_SIZE-output_index);
+	output_index += writtenBytes;
 	unlock_mutex(&output_lock);
 	return writtenBytes;
 }
@@ -158,7 +155,7 @@ uint16_t SendTopicRequestMessage(uint8_t *Buffer, int BufferLen){
  * Sending all available (not candidate) topics to RTnet,
  * after that local topics become global.
  */
-uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
+uint16_t SendTopicList(TopicID list[]){
 	int i = 0, counter = 0, tempLen;
 	uint8_t *tempTopicList[MAX_NUMBER_OF_TOPIC];
 	uint16_t tempTopicIDs[MAX_NUMBER_OF_TOPIC];
@@ -176,12 +173,13 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
 	tempLen = sizeof(MOPSHeader);
 	for (i=0; i<counter; i++)
 		tempLen += 2 + 2 + strlen(tempTopicList[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
-	if ( tempLen > (BufferLen-output_index) )
+	if ( tempLen > (UDP_MAX_SIZE-output_index) )
 		printf("Not enough space to send all Topics from list\n");
 
 	lock_mutex(&output_lock);
-	memmove(Buffer+tempLen, Buffer, output_index); //Move all existing data
-	writtenBytes = buildNewTopicMessage(Buffer, BufferLen-output_index, tempTopicList, tempTopicIDs, counter);
+	memmove(output_buffer+tempLen, output_buffer, output_index); //Move all existing data
+	writtenBytes = buildNewTopicMessage(output_buffer, UDP_MAX_SIZE-output_index, tempTopicList, tempTopicIDs, counter);
+	output_index += writtenBytes;
 	unlock_mutex(&output_lock);
 	return writtenBytes;
 }
@@ -190,7 +188,7 @@ uint16_t SendTopicList(uint8_t *Buffer, int BufferLen, TopicID list[]){
  * Sending only local topics to RTnet,
  * after that local topics become global.
  */
-uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]){
+uint16_t SendLocalTopics(TopicID list[]){
 	int i = 0, counter = 0, tempLen;
 	uint8_t *tempTopicList[MAX_NUMBER_OF_TOPIC];
 	uint16_t tempTopicIDs[MAX_NUMBER_OF_TOPIC];
@@ -208,12 +206,13 @@ uint16_t SendLocalTopics(uint8_t *Buffer, int BufferLen, TopicID list[]){
 	tempLen = sizeof(MOPSHeader);
 	for (i=0; i<counter; i++)
 		tempLen += 2 + 2 + strlen(tempTopicList[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
-	if ( tempLen > (BufferLen-output_index) )
+	if ( tempLen > (UDP_MAX_SIZE-output_index) )
 		printf("Not enough space to send local Topics from list\n");
 
 	lock_mutex(&output_lock);
-	memmove(Buffer+tempLen, Buffer, output_index); //Move all existing data
-	writtenBytes = buildNewTopicMessage(Buffer, BufferLen-output_index, tempTopicList, tempTopicIDs, counter);
+	memmove(output_buffer+tempLen, output_buffer, output_index); //Move all existing data
+	writtenBytes = buildNewTopicMessage(output_buffer, UDP_MAX_SIZE-output_index, tempTopicList, tempTopicIDs, counter);
+	output_index += writtenBytes;
 	unlock_mutex(&output_lock);
 	return writtenBytes;
 }
@@ -444,7 +443,7 @@ void InitProcesConnection(){
     fdmax = mq_listener;
     for (;;){
     	tv.tv_sec = 0;
-    	tv.tv_usec = 100;
+    	tv.tv_usec = 1;
     	read_fd = master;
     	rv = select(fdmax+1, &read_fd, NULL, NULL, &tv);
     	if(rv > 0){		// there are file descriptors to serve

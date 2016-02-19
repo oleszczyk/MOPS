@@ -21,11 +21,11 @@ int main(void)
 	s = connectMOPS();
 	subscribeMOPS(topic, Qos, 3);
 	for(;;){
-	    usleep(1000000);
+	    usleep(10);
 		publishMOPS(s, "Gowno", "cos tam sle");
 		i = readMOPS(array, 100);
 
-		printf("dlugosc: %d, %s\n",i, array);
+		//printf("dlugosc: %d, %s\n",i, array);
 
 	}
     //close(s);

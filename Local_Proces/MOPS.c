@@ -90,7 +90,7 @@ int recvFromMOPS(int fd, uint8_t *buffer, uint16_t buffLen){}
 
 void publishMOPS(int fd, uint8_t *Topic, uint8_t *Message){
 	uint8_t buffer[MAX_QUEUE_SIZE];
-	memset(buffer, 0, sizeof(buffer));
+	memset(buffer, 0, MAX_QUEUE_SIZE);
 	uint16_t packetID, written;
 	written = BuildClientPublishMessage(buffer, sizeof(buffer), Topic, Message, 0, 0, &packetID);
     if (sendToMOPS(buffer, written) == -1) {
@@ -100,7 +100,7 @@ void publishMOPS(int fd, uint8_t *Topic, uint8_t *Message){
 
 void subscribeMOPS(uint8_t **TopicList, uint8_t *QosList, uint8_t NoOfTopics){
 	uint8_t buffer[MAX_QUEUE_SIZE];
-	memset(buffer, 0, sizeof(buffer));
+	memset(buffer, 0, MAX_QUEUE_SIZE);
 	uint16_t packetID, written;
 	written = BuildSubscribeMessage(buffer, sizeof(buffer), TopicList, QosList, NoOfTopics, &packetID);
 
