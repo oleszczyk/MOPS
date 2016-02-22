@@ -17,6 +17,8 @@
 #include <pthread.h>
 #include "MOPS_RTnet_Con.h"
 #include "MOPS.h"
+#include <rtnet.h>
+#include <rtmac.h>
 
 
 static struct sockaddr_in remote;
@@ -46,6 +48,7 @@ void sendToRTnet(int socket, uint8_t *buf, int buflen){
 	socklen_t len = sizeof(remote);
 	int write = 0;
     remote.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    //rt_dev_ioctl(socket, RTMAC_RTIOC_WAITONCYCLE, (void*)TDMA_WAIT_ON_SYNC);
 
     if((write = sendto(socket, buf, buflen, 0, &remote, len)) < 0)
         perror("sendto");

@@ -18,6 +18,8 @@
 #include "MOPS.h"
 #include "MQTT.h"
 #include "MOPS_RTnet_Con.h"
+#include <rtnet.h>
+#include <rtmac.h>
 
 
 static uint8_t MOPS_State = SEND_REQUEST;
@@ -628,16 +630,16 @@ void AnalyzeProcessMessage(uint8_t *buffer, int bytes_wrote, int ClientID){
 
 void ServePublishMessage(uint8_t *buffer, int FrameLen){
 	uint8_t topicTemp[MAX_TOPIC_LENGTH+1];
-	uint16_t TopicLen, index = 0;
+	uint16_t TopicLen, index = 0, tempTopicLength;
 	int topicID;
 	memset(topicTemp, 0, MAX_TOPIC_LENGTH+1);
 
 	index+=3;
 	TopicLen = MSBandLSBTou16(buffer[index], buffer[index+1]);
 	index+=2;
-	memcpy(topicTemp, buffer+index, TopicLen);
+	tempTopicLength = (TopicLen<MAX_TOPIC_LENGTH) ? TopicLen : MAX_TOPIC_LENGTH;
+	memcpy(topicTemp, buffer+index, tempTopicLength);
 	index+=TopicLen;
-
 	topicID = GetIDfromTopicName(topicTemp, TopicLen);
 	switch(topicID){
 	case -1:
