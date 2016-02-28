@@ -45,9 +45,9 @@ uint16_t buildEmptyMessage(uint8_t *Buffer, int BufferLen);
 
 
 
-int connectToRTnet();
-int receiveFromRTnet(int socket, uint8_t *buf, int buflen);
-void sendToRTnet(int socket, uint8_t *buf, int buflen);
+void connectToRTnet();
+int receiveFromRTnet(uint8_t *buf, int buflen);
+void sendToRTnet(uint8_t *buf, int buflen);
 
 #if TARGET_DEVICE == Linux
 pthread_t startNewThread(void *(*start_routine) (void *), void *arg);

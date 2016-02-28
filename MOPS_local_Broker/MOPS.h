@@ -15,6 +15,9 @@
 #include "MOPS_RTnet_Con.h"
 #include "MQTT.h"
 
+#define MAX_PROCES_CONNECTION 10
+#define MAX_QUEUE_SIZE 100
+#define MAX_QUEUE_MESSAGE 10
 
 typedef struct TopicID{
 	uint8_t Topic[MAX_TOPIC_LENGTH+1];
@@ -36,8 +39,6 @@ enum MOPS_STATE{
 
 #if TARGET_DEVICE == Linux
 #define QUEUE_NAME "/MOPS_path"
-#define MAX_PROCES_CONNECTION 10
-#define MAX_QUEUE_SIZE 100
 
 typedef struct MOPS_Queue{
 	mqd_t  	ProcesToMOPS_fd;
@@ -53,10 +54,8 @@ typedef struct MOPS_Queue{
 #endif //TARGET_DEVICE == RTnode
 
 
-void threadSendToRTnet(int RTsocket);
-void threadRecvFromRTnet(int RTsocket);
-void threadRecvFromProcess(int socket);
-
+void threadSendToRTnet();
+void threadRecvFromRTnet();
 
 void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes);
 void InitTopicList(TopicID list[]);
@@ -97,7 +96,7 @@ int ReceiveFromProcess(int file_de);
 int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de);
 int ServeSendingToProcesses();
 int FindClientIDbyFileDesc(int file_de);
-int FindClientIDbyTopic(uint8_t *topic, uint16_t topicLen);
+void FindClientsIDbyTopic(int *clientsID, uint8_t *topic, uint16_t topicLen);
 
 
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);

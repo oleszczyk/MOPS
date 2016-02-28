@@ -31,7 +31,7 @@ int connectMOPS(){
     struct mq_attr attr;
     char buffer[10] = {'/',0,0,0,0,0,0,0,0,0};
     attr.mq_flags = 0;
-    attr.mq_maxmsg = 10;
+    attr.mq_maxmsg = MAX_QUEUE_MESSAGE;
     attr.mq_msgsize = MAX_QUEUE_SIZE;
     attr.mq_curmsgs = 0;
     sprintf(buffer+1, "%d", getpid());
@@ -58,20 +58,6 @@ int connectMOPS(){
 
     return 0;
 }
-/*int file_desc;
-if ((file_desc = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
-    perror("socket");
-
-printf("Trying to connect...\n");
-remote.sun_family = AF_UNIX;
-strcpy(remote.sun_path, SOCK_PATH);
-if (connect(file_desc, (struct sockaddr *)&remote, strlen(remote.sun_path) + sizeof(remote.sun_family)) == -1)
-    perror("connect");
-
-printf("Connected.\n");
-return file_desc; */
-
-
 
 int sendToMOPS(uint8_t *buffer, uint16_t buffLen){
 	return mq_send(mops_queue.ProcesToMOPS_fd, buffer, buffLen, 0);

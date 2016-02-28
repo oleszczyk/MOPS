@@ -14,6 +14,8 @@
 #define RTnode 2
 #define TARGET_DEVICE Linux   //or RTNODE
 
+#define MAX_QUEUE_SIZE 100
+#define MAX_QUEUE_MESSAGE 10
 
 
 int connectMOPS();
@@ -30,7 +32,6 @@ uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB);
 
 #if TARGET_DEVICE == Linux
 #define QUEUE_NAME "/MOPS_path"
-#define MAX_QUEUE_SIZE 100
 
 typedef struct MOPS_Queue{
 	mqd_t  	ProcesToMOPS_fd;

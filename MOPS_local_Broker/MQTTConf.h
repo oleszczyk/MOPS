@@ -29,14 +29,14 @@
 #endif
 
 #if USERNAMEFLAG == 1
-	#define USERNAME 	"Rudy"
+	#define USERNAME 	"username"
 #else
 	#define PASSWORDFLAG 0
 #endif
 
 
 #if PASSWORDFLAG == 1
-	#define PASSWORD 	"emc2"
+	#define PASSWORD 	"password"
 #endif
 //*******************************//
 
@@ -45,7 +45,7 @@
 *  Client Publishing settings  *
 *                              *
 *******************************/
-#define QOS  2      // 0 - 2
+#define QOS  0      // 0 - 2
 
 
 #endif /* CONFIG_H_ */

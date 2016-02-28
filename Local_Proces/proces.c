@@ -9,24 +9,34 @@
 
 #include "MOPS.h"
 
+#define SEN 1
+#define REC 2
+#define TYPE SEN   //1 - sender, 2 - receiver
+
+
 
 int main(void)
 {
     int s;
     int i;
     uint8_t array[100];
-    uint8_t *topic[]={"TopicTopicTopic", "Gowno", "niktktosnikt"};
-    uint8_t Qos[]={1, 2, 1};
+    uint8_t *topic[]={"jakisTopic", "kupa"};
+    uint8_t Qos[]={1, 2};
 
 	s = connectMOPS();
-	subscribeMOPS(topic, Qos, 3);
+#if TYPE == REC
+	subscribeMOPS(topic, Qos, 2);
+#endif
 	for(;;){
-	    usleep(10);
-		publishMOPS(s, "Gowno", "cos tam sle");
+
+#if TYPE == SEN
+		usleep(200000);
+		publishMOPS(s, "jakisTopic", "Pierwsza wiadomosx");
+#endif
+#if TYPE == REC
 		i = readMOPS(array, 100);
-
-		//printf("dlugosc: %d, %s\n",i, array);
-
+		printf("dlugosc: %d, %s\n",i, array);
+#endif
 	}
     //close(s);
     return 0;

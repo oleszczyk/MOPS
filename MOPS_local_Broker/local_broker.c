@@ -6,12 +6,12 @@
  */
 #include <sys/select.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/time.h>
 #include <mqueue.h>
@@ -20,15 +20,25 @@
 #include "MOPS_RTnet_Con.h"
 #include <rtnet.h>
 #include <rtmac.h>
-
+#include <sys/mman.h>
+#include <limits.h>
 
 static uint8_t MOPS_State = SEND_REQUEST;
-uint8_t input_buffer[UDP_MAX_SIZE], output_buffer[UDP_MAX_SIZE], waiting_output_buffer[UDP_MAX_SIZE], waiting_input_buffer[UDP_MAX_SIZE];
-uint16_t input_index = 0, output_index = 0, waiting_output_index = 0, waiting_input_index = 0;
+uint8_t input_buffer[UDP_MAX_SIZE];          //Buffer for receiving data from RTnet
+uint8_t output_buffer[UDP_MAX_SIZE]; 		 //Buffer for sending data to RTnet
+uint8_t waiting_output_buffer[UDP_MAX_SIZE]; //Buffer for incoming data from processes
+											 //(waiting for sending them to RTnet)
+uint8_t waiting_input_buffer[UDP_MAX_SIZE];  //Buffer for outgoing data to processes
+											 //(waiting for sending them to processes)
 
-TopicID list[MAX_NUMBER_OF_TOPIC];
-SubscriberList sub_list[MAX_NUMBER_OF_SUBSCRIPTIONS];
-MOPS_Queue mops_queue[MAX_PROCES_CONNECTION];
+uint16_t input_index = 0;
+uint16_t output_index = 0;
+uint16_t waiting_output_index = 0;
+uint16_t waiting_input_index = 0;
+
+TopicID list[MAX_NUMBER_OF_TOPIC];						//list of all known topic with theirs ID
+SubscriberList sub_list[MAX_NUMBER_OF_SUBSCRIPTIONS];	//list of all subscribers ID and subscribed topics by them
+MOPS_Queue mops_queue[MAX_PROCES_CONNECTION];			//list of connected processes to broker
 
 #if TARGET_DEVICE == Linux
 pthread_mutex_t output_lock, input_lock, waiting_output_lock, waiting_input_lock;
@@ -40,7 +50,8 @@ SemaphoreHandle_t output_lock, input_lock, waiting_output_lock, waiting_input_lo
 
 int main(void)
 {
-	int RTsocket = 0;
+	mlockall(MCL_CURRENT | MCL_FUTURE);
+
 	mutex_init(&input_lock);
 	mutex_init(&output_lock);
 	mutex_init(&waiting_output_lock);
@@ -49,10 +60,10 @@ int main(void)
 	InitTopicList(list);
 	MOPS_QueueInit(mops_queue);
 	SubListInit(sub_list);
-	RTsocket = connectToRTnet();
+	connectToRTnet();
 
-    startNewThread(&threadSendToRTnet, (void *)RTsocket);
-    startNewThread(&threadRecvFromRTnet, (void *)RTsocket);
+    startNewThread(&threadSendToRTnet, NULL);
+    startNewThread(&threadRecvFromRTnet, NULL);
 
 	InitProcesConnection();
 }
@@ -61,34 +72,51 @@ void MOPS_QueueInit(MOPS_Queue *queue){
 	int i = 0;
 	for(i=0; i<MAX_PROCES_CONNECTION; i++)
 	{
-		queue->MOPSToProces_fd = 0;
-		queue->ProcesToMOPS_fd = 0;
+		queue[i].MOPSToProces_fd = 0;
+		queue[i].ProcesToMOPS_fd = 0;
 	}
 }
 
 void SubListInit(SubscriberList *sublist){
-	int i = 0;
+	int i;
 	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++){
 		sublist[i].ClientID = -1;
 		memset(sublist[i].Topic, 0, MAX_TOPIC_LENGTH+1);
 	}
 }
 
-void threadRecvFromRTnet(int RTsocket){
+void DeleteProcessFromSubList(int ClientID, SubscriberList *sublist){
+	int i;
+	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++)
+		if(i == ClientID){
+			sublist[i].ClientID = -1;
+			memset(sublist[i].Topic, 0, MAX_TOPIC_LENGTH+1);
+		}
+}
+
+void threadRecvFromRTnet(){
     for(;;){
     	lock_mutex(&input_lock);
-    	input_index = receiveFromRTnet(RTsocket, input_buffer, UDP_MAX_SIZE);
+    	input_index = receiveFromRTnet(input_buffer, UDP_MAX_SIZE);
 		AnalyzeIncomingUDP(input_buffer, input_index);
 		memset(input_buffer, 0, UDP_MAX_SIZE);
 		unlock_mutex(&input_lock);
     }
 }
 
-void threadSendToRTnet(int RTsocket){
+void threadSendToRTnet(){
 	uint8_t are_local_topics = 0;
-	for(;;){
-		usleep(10);  // slot czasowy
+	int err = 0, _fd;
 
+	// Open tdma device
+	_fd = rt_dev_open("TDMA0", O_RDWR);
+	if (_fd < 0)
+		return ;
+
+	for(;;){
+		err = rt_dev_ioctl(_fd, RTMAC_RTIOC_WAITONCYCLE, (void*)TDMA_WAIT_ON_SYNC);
+		if(err)
+			printf("Failed to issue RTMAC_RTIOC_WAITONCYCLE, err=%d\n", err);
 		switch(MOPS_State){
 		case SEND_NOTHING:
 			//check if there are local topic to announce
@@ -113,7 +141,7 @@ void threadSendToRTnet(int RTsocket){
 
 		lock_mutex(&output_lock);
 		if ( (output_index > sizeof(MOPSHeader)) || (output_buffer[0] == TOPIC_REQUEST) ){
-			sendToRTnet(RTsocket, output_buffer, output_index);
+			sendToRTnet(output_buffer, output_index);
 			MOPS_State = SEND_NOTHING;
 		}
 		memset(output_buffer, 0, UDP_MAX_SIZE);
@@ -433,7 +461,7 @@ void InitProcesConnection(){
 
     /* initialize the queue attributes */
     attr.mq_flags = 0;
-    attr.mq_maxmsg = 10;
+    attr.mq_maxmsg = MAX_QUEUE_MESSAGE;
     attr.mq_msgsize = MAX_QUEUE_SIZE;
     attr.mq_curmsgs = 0;
 
@@ -474,6 +502,9 @@ int ReceiveFromProcess(int file_de){
     uint8_t temp[MAX_QUEUE_SIZE+1];
 
 	bytes_read = mq_receive(file_de, temp, MAX_QUEUE_SIZE, NULL);
+	if(bytes_read == -1){
+		CloseProcessConnection(file_de);
+	}
 	if(bytes_read>=sizeof(FixedHeader)){
 		ClientID = FindClientIDbyFileDesc(file_de);
 		AnalyzeProcessMessage(temp, bytes_read, ClientID);
@@ -482,7 +513,16 @@ int ReceiveFromProcess(int file_de){
 }
 
 int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de){
-	return mq_send(file_de, buffer, buffLen, 0);
+	struct mq_attr attr;
+	attr.mq_flags = 0;
+	attr.mq_maxmsg = MAX_QUEUE_MESSAGE;
+	attr.mq_msgsize = MAX_QUEUE_SIZE;
+	attr.mq_curmsgs = 0;
+
+	mq_getattr(file_de, &attr);
+	if(attr.mq_curmsgs < MAX_QUEUE_MESSAGE)
+		return mq_send(file_de, buffer, buffLen, 0);
+	return 0;
 }
 
 /*
@@ -491,15 +531,10 @@ int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de){
  * 	-1 					  - if there is not place in MOPSQueue array or no message received from listener_fd
  */
 int ServeNewProcessConnection(fd_set *set, int listener_fd){
-    struct mq_attr attr;
     uint8_t buffer[MAX_QUEUE_SIZE+1], temp;
     int new_mq_Proces_MOPS, new_mq_MOPS_Proces;
-    attr.mq_flags = 0;
-    attr.mq_maxmsg = 10;
-    attr.mq_msgsize = MAX_QUEUE_SIZE;
-    attr.mq_curmsgs = 0;
-    memset(buffer, 0, MAX_QUEUE_SIZE+1);
 
+    memset(buffer, 0, MAX_QUEUE_SIZE+1);
     if(mq_receive(listener_fd, buffer, MAX_QUEUE_SIZE, NULL) > 0){
     	temp = strlen(buffer);
     	buffer[temp] = 'b';
@@ -514,12 +549,21 @@ int ServeNewProcessConnection(fd_set *set, int listener_fd){
 
 		if (AddToMOPSQueue(new_mq_MOPS_Proces, new_mq_Proces_MOPS) >= 0){
 			FD_SET(new_mq_Proces_MOPS, set);
-			//printf("Nowy deskryptor: %d, nazwa kolejki: %s \n", new_mq_Proces_MOPS, buffer);
+			printf("Nowy deskryptor: %d, nazwa kolejki: %s \n", new_mq_Proces_MOPS, buffer);
 			return new_mq_Proces_MOPS;
 		}
     }
     return -1;
 }
+
+void DeleteProcessFromQueueList(int ClientID, MOPS_Queue *queue){
+	mq_close(queue[ClientID].MOPSToProces_fd);
+	mq_close(queue[ClientID].ProcesToMOPS_fd);
+
+	queue[ClientID].MOPSToProces_fd = 0;
+	queue[ClientID].ProcesToMOPS_fd = 0;
+}
+
 #endif //TARGET_DEVICE == Linux
 
 
@@ -530,6 +574,14 @@ void InitProcesConnection(){
 	for(;;){}
 }
 #endif //TARGET_DEVICE == RTnode
+
+void CloseProcessConnection(file_de){
+	int ClientID;
+	printf("Proces ubijam!\n");
+	ClientID = FindClientIDbyFileDesc(file_de);
+	DeleteProcessFromQueueList(ClientID, mops_queue);
+	DeleteProcessFromSubList(ClientID, sub_list);
+}
 
 int ServeSendingToProcesses(){
 	uint8_t tempBuffer[UDP_MAX_SIZE], HeadLen;
@@ -553,7 +605,6 @@ int ServeSendingToProcesses(){
 		while(FHeader.MessageType!=0 && FrameLen<=written_bytes)
 		{
 			PrepareFrameToSendToProcess(tempBuffer+OldFrameLen, FrameLen-OldFrameLen);
-
 			memcpy(&FHeader, tempBuffer + FrameLen, HeadLen);
 			OldFrameLen = FrameLen;
 			FrameLen += MSBandLSBTou16(FHeader.RemainingLengthMSB, FHeader.RemainingLengthLSB) + HeadLen;
@@ -563,37 +614,44 @@ int ServeSendingToProcesses(){
 }
 
 void PrepareFrameToSendToProcess(uint8_t *Buffer, int written_bytes){
-	 uint16_t topicID, topicLen, index = 0;
-	 uint8_t tempBuffer[MAX_QUEUE_SIZE], HeaderLen;
-	 uint8_t tempTopic[MAX_TOPIC_LENGTH+1], i, tempMSB = 0, tempLSB = 0;
-	 FixedHeader FHeader;
-	 int clientID;
+	uint16_t topicID, topicLen, index = 0;
+	uint8_t tempBuffer[MAX_QUEUE_SIZE], HeaderLen;
+	uint8_t tempTopic[MAX_TOPIC_LENGTH+1], tempMSB = 0, tempLSB = 0;
+	FixedHeader FHeader;
+	int clientID[MAX_PROCES_CONNECTION], i;
 
-	 memset(tempBuffer, 0, MAX_QUEUE_SIZE);
-	 HeaderLen = sizeof(FHeader);
+	memset(tempBuffer, 0, MAX_QUEUE_SIZE);
+	memcpy(tempBuffer, Buffer, written_bytes);
+	HeaderLen = sizeof(FHeader);
 
-	 topicID = MSBandLSBTou16(Buffer[HeaderLen], Buffer[HeaderLen+1]);
-	 topicLen = GetTopicNameFromID(topicID, tempTopic);
-	 clientID = FindClientIDbyTopic(tempTopic, topicLen);
-	 u16ToMSBandLSB(topicLen, &tempMSB, &tempLSB);
+	topicID = MSBandLSBTou16(tempBuffer[HeaderLen], tempBuffer[HeaderLen+1]);
+	topicLen = GetTopicNameFromID(topicID, tempTopic);
+	FindClientsIDbyTopic(clientID, tempTopic, topicLen);
+	u16ToMSBandLSB(topicLen, &tempMSB, &tempLSB);
 
-	 Buffer[ HeaderLen ] = tempMSB;
-	 Buffer[HeaderLen+1] = tempLSB;
-	 index = HeaderLen+2;
-	 memmove(Buffer+index+topicLen, Buffer+index, written_bytes-index);
-	 memcpy(Buffer+index, tempTopic, topicLen);
+	tempBuffer[ HeaderLen ] = tempMSB;
+	tempBuffer[HeaderLen+1] = tempLSB;
+	index = HeaderLen+2;
+	memmove(tempBuffer+index+topicLen, tempBuffer+index, written_bytes-index);
+	memcpy(tempBuffer+index, tempTopic, topicLen);
 
-	 SendToProcess(Buffer, written_bytes+topicLen, mops_queue[clientID].MOPSToProces_fd);
+	for(i=0; i<MAX_PROCES_CONNECTION; i++)
+		if (clientID[i] != -1)
+			SendToProcess(tempBuffer, written_bytes+topicLen, mops_queue[clientID[i]].MOPSToProces_fd);
 }
 
-int FindClientIDbyTopic(uint8_t *topic, uint16_t topicLen){
+void FindClientsIDbyTopic(int *clientsID, uint8_t *topic, uint16_t topicLen){
 	int i;
+	int counter = 0;
+	for(i=0; i<MAX_PROCES_CONNECTION; i++)
+		clientsID[i] = -1;
+
 	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++){
 		if(strncmp(sub_list[i].Topic, topic, topicLen) == 0){
-			return sub_list[i].ClientID;
+			clientsID[counter] = sub_list[i].ClientID;
+			counter++;
 		}
 	}
-	return -1;
 }
 
 int FindClientIDbyFileDesc(int file_de){
@@ -689,8 +747,10 @@ int AddToSubscribersList(uint8_t *topic, uint16_t topicLen, int ClientID){
 
 void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen){
 	lock_mutex(&waiting_output_lock);
-	memcpy(waiting_output_buffer+waiting_output_index, buffer, FrameLen);
-	waiting_output_index += FrameLen;
+	if(waiting_output_index <= (uint16_t) 0.9*UDP_MAX_SIZE){
+		memcpy(waiting_output_buffer+waiting_output_index, buffer, FrameLen);
+		waiting_output_index += FrameLen;
+	}
 	unlock_mutex(&waiting_output_lock);
 }
 
@@ -718,9 +778,10 @@ void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID){
 	memcpy( tempBuff+index, buffer+index+TopicLen, FrameLen-(index+TopicLen) );
 
 	lock_mutex(&output_lock);
-	memcpy(output_buffer+output_index, tempBuff, FrameLen-TopicLen);
-	output_index += (FrameLen-TopicLen);
-	//printf("Frame: %d, TopicLen: %d \n", FrameLen, TopicLen);
+	if(output_index <= (uint16_t) 0.9*UDP_MAX_SIZE){
+		memcpy(output_buffer+output_index, tempBuff, FrameLen-TopicLen);
+		output_index += (FrameLen-TopicLen);
+	}
 	unlock_mutex(&output_lock);
 }
 

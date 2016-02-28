@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/un.h>
 #include <stdint.h>
 #include <arpa/inet.h>
@@ -19,49 +18,63 @@
 #include "MOPS.h"
 #include <rtnet.h>
 #include <rtmac.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <limits.h>
+
+#define IPADDR     "10.255.255.255"
+#define IPADDR_LO  "127.0.0.1"
 
 
-static struct sockaddr_in remote;
+static struct sockaddr_in rec_addr;
+static struct sockaddr_in sd_addr_b;
+static struct sockaddr_in sd_addr_l;
+int get_sock;
+int bcast_sock;
 
 #if TARGET_DEVICE == Linux
-int connectToRTnet(){
-	int bcast_sock;
+void connectToRTnet(){
 	int enable = 1;
-    if ((bcast_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+    if ((bcast_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
         perror("socket");
-    }
-    setsockopt(bcast_sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
-    setsockopt(bcast_sock, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable));
-    memset(&remote, 0, sizeof(remote));
+    if ((get_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+            perror("socket");
 
-    remote.sin_family = AF_INET;
-    remote.sin_port = htons(PORT);
-    remote.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    memset(&rec_addr, 0, sizeof(rec_addr));
+    memset(&sd_addr_b, 0, sizeof(sd_addr_b));
+    memset(&sd_addr_l, 0, sizeof(sd_addr_l));
 
-	if (bind(bcast_sock, &remote, sizeof(remote))==-1)
+    rec_addr.sin_family = AF_INET;
+    rec_addr.sin_port = htons(PORT);
+    rec_addr.sin_addr.s_addr =  htonl(INADDR_ANY);//inet_addr("10.0.0.0");
+
+    sd_addr_b.sin_family = AF_INET;
+    sd_addr_b.sin_port = htons(PORT);
+    sd_addr_b.sin_addr.s_addr =  inet_addr(IPADDR);
+
+    sd_addr_l.sin_family = AF_INET;
+    sd_addr_l.sin_port = htons(PORT);
+    sd_addr_l.sin_addr.s_addr =  inet_addr(IPADDR_LO);
+
+	if (bind(get_sock, &rec_addr, sizeof(rec_addr))==-1)
 		perror("bind");
-
-    return bcast_sock;
 }
 
-void sendToRTnet(int socket, uint8_t *buf, int buflen){
-	socklen_t len = sizeof(remote);
+void sendToRTnet(uint8_t *buf, int buflen){
 	int write = 0;
-    remote.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-    //rt_dev_ioctl(socket, RTMAC_RTIOC_WAITONCYCLE, (void*)TDMA_WAIT_ON_SYNC);
-
-    if((write = sendto(socket, buf, buflen, 0, &remote, len)) < 0)
+	socklen_t len = sizeof(sd_addr_b);
+    if((write = sendto(bcast_sock, buf, buflen, 0, &sd_addr_b, len)) < 0)
+        perror("sendto");
+    if((write = sendto(bcast_sock, buf, buflen, 0, &sd_addr_l, len)) < 0)
         perror("sendto");
 }
 
-
-int receiveFromRTnet(int socket, uint8_t *buf, int buflen){
+int receiveFromRTnet(uint8_t *buf, int buflen){
 	int written = 0;
-	socklen_t len = sizeof(remote);
-	written = recvfrom(socket, buf, buflen, 0, &remote, &len);
+	socklen_t len = sizeof(rec_addr);
+	written = recvfrom(get_sock, buf, buflen, 0, &rec_addr, &len);
 	return written;
 }
-
 
 pthread_t startNewThread(void *(*start_routine) (void *), void *arg){
 	int err;
