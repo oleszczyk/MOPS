@@ -34,7 +34,6 @@ int bcast_sock;
 
 #if TARGET_DEVICE == Linux
 void connectToRTnet(){
-	int enable = 1;
     if ((bcast_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
         perror("socket");
     if ((get_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
@@ -56,23 +55,23 @@ void connectToRTnet(){
     sd_addr_l.sin_port = htons(PORT);
     sd_addr_l.sin_addr.s_addr =  inet_addr(IPADDR_LO);
 
-	if (bind(get_sock, &rec_addr, sizeof(rec_addr))==-1)
+	if (bind(get_sock, (struct sockaddr*)&rec_addr, sizeof(rec_addr))==-1)
 		perror("bind");
 }
 
 void sendToRTnet(uint8_t *buf, int buflen){
 	int write = 0;
 	socklen_t len = sizeof(sd_addr_b);
-    if((write = sendto(bcast_sock, buf, buflen, 0, &sd_addr_b, len)) < 0)
+    if((write = sendto(bcast_sock, buf, buflen, 0, (struct sockaddr*)&sd_addr_b, len)) < 0)
         perror("sendto");
-    if((write = sendto(bcast_sock, buf, buflen, 0, &sd_addr_l, len)) < 0)
+    if((write = sendto(bcast_sock, buf, buflen, 0, (struct sockaddr*)&sd_addr_l, len)) < 0)
         perror("sendto");
 }
 
 int receiveFromRTnet(uint8_t *buf, int buflen){
 	int written = 0;
 	socklen_t len = sizeof(rec_addr);
-	written = recvfrom(get_sock, buf, buflen, 0, &rec_addr, &len);
+	written = recvfrom(get_sock, buf, buflen, 0, (struct sockaddr*)&rec_addr, &len);
 	return written;
 }
 
@@ -141,7 +140,7 @@ void unlock_mutex(SemaphoreHandle_t *lock){
 //***************** MOPS - MOPS communication protocol ********************
 uint16_t buildTopicRequestMessage(uint8_t *Buffer, int BufferLen){
 	MOPSHeader MHeader;
-	uint8_t index = 0, tempLen = 0;
+	uint8_t index = 0;
 
 	MHeader.MOPSMessageType = TOPIC_REQUEST;
 	MHeader.RemainingLengthLSB = 0;
@@ -164,7 +163,7 @@ uint16_t buildNewTopicMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topics, 
 		u16ToMSBandLSB(IDs[i], &MSB_temp, &LSB_temp);
 		Buffer[index] = MSB_temp;
 		Buffer[index+1] = LSB_temp;
-		tempLen = strlen(Topics[i]);
+		tempLen = strlen((char*)(Topics[i]));
 		u16ToMSBandLSB(tempLen, &MSB_temp, &LSB_temp);
 		Buffer[index+2] = MSB_temp;
 		Buffer[index+3] = LSB_temp;
@@ -186,7 +185,7 @@ uint16_t buildNewTopicMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topics, 
 
 uint16_t buildEmptyMessage(uint8_t *Buffer, int BufferLen){
 	MOPSHeader MHeader;
-	uint8_t index = 0, tempLen = 0;
+	uint8_t index = 0;
 
 	MHeader.MOPSMessageType = NOTHING;
 	MHeader.RemainingLengthLSB = 0;

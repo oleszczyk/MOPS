@@ -4,10 +4,12 @@
  *  Created on: Jan 16, 2016
  *      Author: rudy
  */
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #include "MQTT.h"
+#include "MOPS.h"
 #include "MQTTConf.h"
 
 
@@ -41,7 +43,7 @@ void Init_ProtocolName(ProtocolName *PName){
 }
 
 void Init_ConnectVariableHeader(ConnectVariableHeader *CVHeader, uint8_t Flags, uint16_t KeepAlive){
-	uint16_t MSBtemp, LSBtemp;
+	uint8_t MSBtemp, LSBtemp;
 	Init_ProtocolName(&CVHeader->PName);
 	CVHeader->ProtocolLevel = 4;
 	CVHeader->ConnectFlags = Flags;
@@ -52,7 +54,7 @@ void Init_ConnectVariableHeader(ConnectVariableHeader *CVHeader, uint8_t Flags, 
 }
 
 void Init_TopicName(TopicName *TName, uint8_t *Topic){
-	uint16_t TopicLen = strlen(Topic);
+	uint16_t TopicLen = strlen((char*)Topic);
 	uint8_t MSB_temp, LSB_temp;
 	u16ToMSBandLSB(TopicLen, &MSB_temp, &LSB_temp);
 	TName->MSB_Length = MSB_temp;
@@ -65,7 +67,7 @@ void Init_TopicName(TopicName *TName, uint8_t *Topic){
 uint16_t BuildConnectMessage(uint8_t *Message, int MessageLen, uint16_t KeepAlive){
 	FixedHeader FHeader;
 	ConnectVariableHeader CVHeader;
-	uint8_t i, MSB_temp, LSB_temp, flags;
+	uint8_t MSB_temp, LSB_temp, flags;
 	uint16_t length;
 	int index;
 	int tempLen = 0;
@@ -194,7 +196,7 @@ uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topi
 	Flags = (DUP<<3) + (QOS<<1) + Retain;
 
 	//Check if all data can be stored in Message buffer
-	tempLen += sizeof(FHeader) + 2 + strlen(Topic) + 2 +strlen(Message);
+	tempLen += sizeof(FHeader) + 2 + strlen((char*)Topic) + 2 +strlen((char*)Message);
 	if( QOS > 0)
 		tempLen += 2;
 	if (tempLen > BufferLen)
@@ -229,7 +231,7 @@ uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topi
 	}
 
 	//**** Payload part *****//
-	tempLen = strlen(Message);
+	tempLen = strlen((char*)Message);
 	u16ToMSBandLSB(tempLen, &MSB_temp, &LSB_temp);
 	Buffer[index] = MSB_temp;
 	Buffer[index+1] = LSB_temp;
@@ -278,7 +280,7 @@ uint16_t BuildSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, 
 	//Check if all data can be stored in Message buffer
 	tempLen += sizeof(FHeader) + sizeof(SVHeader);
 	for (i=0; i<TopicNo; i++)
-		tempLen += 2 + strlen(Topic[i]) + 1;
+		tempLen += 2 + strlen((char*)Topic[i]) + 1;
 	if (tempLen > BufferLen)
 		return 0;
 	tempLen = 0;
@@ -294,7 +296,7 @@ uint16_t BuildSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, 
 
 	//**** Payload part *****//
 	for (i=0; i<TopicNo; i++){
-		tempLen = strlen(Topic[i]);
+		tempLen = strlen((char*)Topic[i]);
 		u16ToMSBandLSB(tempLen, &MSB_temp, &LSB_temp);
 		Buffer[index] = MSB_temp;
 		Buffer[index+1] = LSB_temp;
@@ -370,7 +372,7 @@ uint16_t BuildUnSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic
 	//Check if all data can be stored in Message buffer
 	tempLen += sizeof(FHeader) + sizeof(USVHeader);
 	for (i=0; i<TopicNo; i++)
-		tempLen += 2 + strlen(Topic[i]);
+		tempLen += 2 + strlen((char*)Topic[i]);
 	if (tempLen > BufferLen)
 		return 0;
 	tempLen = 0;
@@ -386,7 +388,7 @@ uint16_t BuildUnSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic
 
 	//**** Payload part *****//
 	for (i=0; i<TopicNo; i++){
-		tempLen = strlen(Topic[i]);
+		tempLen = strlen((char*)(Topic[i]));
 		u16ToMSBandLSB(tempLen, &MSB_temp, &LSB_temp);
 		Buffer[index] = MSB_temp;
 		Buffer[index+1] = LSB_temp;

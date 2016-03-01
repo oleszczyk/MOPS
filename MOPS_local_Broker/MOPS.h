@@ -59,6 +59,7 @@ void threadRecvFromRTnet();
 
 void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes);
 void InitTopicList(TopicID list[]);
+void SubListInit(SubscriberList *sublist);
 
 uint16_t SendEmptyMessage();
 uint16_t SendTopicRequestMessage();
@@ -88,6 +89,8 @@ int GetIDfromTopicName(uint8_t *topic, uint16_t topicLen);
 uint16_t GetTopicNameFromID(uint16_t id, uint8_t *topic);
 
 void InitProcesConnection();
+int ServeNewProcessConnection(fd_set *set, int listener_fd);
+void CloseProcessConnection(int file_de);
 int AddToMOPSQueue(int MOPS_Proces_fd, int Proces_MOPS_fd);
 void MOPS_QueueInit(MOPS_Queue *queue);
 int AddToSubscribersList(uint8_t *topic, uint16_t topicLen, int ClientID);

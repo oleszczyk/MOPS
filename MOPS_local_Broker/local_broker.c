@@ -62,10 +62,12 @@ int main(void)
 	SubListInit(sub_list);
 	connectToRTnet();
 
-    startNewThread(&threadSendToRTnet, NULL);
-    startNewThread(&threadRecvFromRTnet, NULL);
+    startNewThread((void*)&threadSendToRTnet, NULL);
+    startNewThread((void*)&threadRecvFromRTnet, NULL);
 
 	InitProcesConnection();
+
+	return 0;
 }
 
 void MOPS_QueueInit(MOPS_Queue *queue){
@@ -111,7 +113,7 @@ void threadSendToRTnet(){
 	// Open tdma device
 	_fd = rt_dev_open("TDMA0", O_RDWR);
 	if (_fd < 0)
-		return ;
+		return;
 
 	for(;;){
 		err = rt_dev_ioctl(_fd, RTMAC_RTIOC_WAITONCYCLE, (void*)TDMA_WAIT_ON_SYNC);
@@ -120,8 +122,6 @@ void threadSendToRTnet(){
 		switch(MOPS_State){
 		case SEND_NOTHING:
 			//check if there are local topic to announce
-			//if yes, then add them to head of message and update TopicList - reset LocalTopic flag
-			//else, send 'nothing'
 			are_local_topics = ApplyIDtoNewTopics();
 			MoveWaitingToFinal();
 			if(are_local_topics)
@@ -193,7 +193,7 @@ uint16_t SendTopicList(TopicID list[]){
 
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
 		if (list[i].ID != 0){
-			tempTopicList[counter] = &list[i].Topic;
+			tempTopicList[counter] = (uint8_t*)(&list[i].Topic);
 			tempTopicIDs[counter] = list[i].ID;
 			if(list[i].LocalTopic == 1)
 				list[i].LocalTopic = 0;
@@ -202,7 +202,7 @@ uint16_t SendTopicList(TopicID list[]){
 	}
 	tempLen = sizeof(MOPSHeader);
 	for (i=0; i<counter; i++)
-		tempLen += 2 + 2 + strlen(tempTopicList[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
+		tempLen += 2 + 2 + strlen((char*)tempTopicList[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
 	if ( tempLen > (UDP_MAX_SIZE-output_index) )
 		printf("Not enough space to send all Topics from list\n");
 
@@ -220,13 +220,13 @@ uint16_t SendTopicList(TopicID list[]){
  */
 uint16_t SendLocalTopics(TopicID list[]){
 	int i = 0, counter = 0, tempLen;
-	uint8_t *tempTopicList[MAX_NUMBER_OF_TOPIC];
+	uint8_t *(tempTopicList[MAX_NUMBER_OF_TOPIC]);
 	uint16_t tempTopicIDs[MAX_NUMBER_OF_TOPIC];
 	uint16_t writtenBytes;
 
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
 		if (list[i].ID != 0 && list[i].LocalTopic==1){
-			tempTopicList[counter] = &list[i].Topic;
+			tempTopicList[counter] = (uint8_t*)(&list[i].Topic);
 			tempTopicIDs[counter] = list[i].ID;
 			list[i].LocalTopic = 0;
 			counter++;
@@ -235,7 +235,7 @@ uint16_t SendLocalTopics(TopicID list[]){
 
 	tempLen = sizeof(MOPSHeader);
 	for (i=0; i<counter; i++)
-		tempLen += 2 + 2 + strlen(tempTopicList[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
+		tempLen += 2 + 2 + strlen((char*)tempTopicList[i]); //2 for ID msb, ID lsb, 2 for length msb, length lsb.
 	if ( tempLen > (UDP_MAX_SIZE-output_index) )
 		printf("Not enough space to send local Topics from list\n");
 
@@ -255,13 +255,13 @@ uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16
 
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
 		//if candidate, apply ID
-		if( strncmp(list[i].Topic, topic, tempTopicLength)==0 && list[i].Topic[0]!=0 && list[i].ID==0 ){
+		if(strncmp((char*)list[i].Topic, (char*)topic, tempTopicLength)==0 && list[i].Topic[0]!=0 && list[i].ID==0 ){
 			list[i].ID = id;
 			//printf("Dodalem ID kandydatowi: %s \n", list[i].Topic);
 			return 0;
 		}
 		// if exists such topic (or at least ID) available, do not do anything
-		if ( (list[i].ID == id) || (strncmp(list[i].Topic, topic, tempTopicLength)==0 && list[i].Topic[0]!=0) ){
+		if ( (list[i].ID == id) || (strncmp((char*)list[i].Topic, (char*)topic, tempTopicLength)==0 && list[i].Topic[0]!=0) ){
 			//printf("Nie dodam bo jest: %s \n", list[i].Topic);
 			return 2;
 		}
@@ -269,7 +269,7 @@ uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16
 
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
 		//else add new topic in the first empty place
-		if ( list[i].ID==0 && strlen(list[i].Topic)==0 ){
+		if ( list[i].ID==0 && strlen((char*)list[i].Topic)==0 ){
 			memcpy(list[i].Topic, topic, tempTopicLength);
 			//printf("Dodany: %s \n", list[i].Topic);
 			list[i].ID = id;
@@ -292,7 +292,7 @@ uint8_t ApplyIDtoNewTopics(){
 			max = list[i].ID;
 	}
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
-		if ( list[i].ID==0 && strlen(list[i].Topic)!=0 ){
+		if ( list[i].ID==0 && strlen((char*)list[i].Topic)!=0 ){
 			list[i].ID = max+1;
 			list[i].LocalTopic = 1;
 			max++;
@@ -310,7 +310,7 @@ void AddTopicCandidate(uint8_t *topic, uint16_t topicLen){
 	tempTopicLength = (topicLen<MAX_TOPIC_LENGTH) ? topicLen : MAX_TOPIC_LENGTH;
 	if(GetIDfromTopicName(topic, tempTopicLength) == -1)
 		for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
-			if ( list[i].ID==0 && strlen(list[i].Topic)==0 ){
+			if ( list[i].ID==0 && strlen((char*)list[i].Topic)==0 ){
 				memcpy(list[i].Topic, topic, tempTopicLength);
 				return;
 			}
@@ -329,7 +329,7 @@ int GetIDfromTopicName(uint8_t *topic, uint16_t topicLen){
 
 	tempTopicLength = (topicLen<MAX_TOPIC_LENGTH) ? topicLen : MAX_TOPIC_LENGTH;
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
-		if (strncmp(list[i].Topic, topic, tempTopicLength)==0 && list[i].Topic[0]!=0)  //when  are the same
+		if (strncmp((char*)list[i].Topic, (char*)topic, tempTopicLength)==0 && list[i].Topic[0]!=0)  //when  are the same
 				return list[i].ID;
 	}
 	return -1;
@@ -347,7 +347,7 @@ uint16_t GetTopicNameFromID(uint16_t id, uint8_t *topic){
 	memset(topic, 0, MAX_TOPIC_LENGTH+1);
 	for (i=0; i<MAX_NUMBER_OF_TOPIC; i++){
 		if (list[i].ID == id){  //when  are the same
-			len = strlen(list[i].Topic);
+			len = strlen((char*)list[i].Topic);
 			memcpy(topic, &list[i].Topic, len);
 			return len;
 		}
@@ -428,13 +428,12 @@ void UpdateTopicList(uint8_t *Buffer, int BufferLen){
 
 		err = AddTopicToList(list, Buffer+index, tempTopicLength, tempTopicID);
 		index += tempTopicLength;
-		/*if(err == 1)
+		if(err == 1)
 			printf("Brak miejsca na liscie! \n");
 		if(err == 0)
 			printf("Dodalem, id: %d \n", tempTopicID);
 		if(err == 2)
 			printf("Topic, id: %d, juz istnieje. \n", tempTopicID);
-		*/
 	}
 }
 
@@ -454,7 +453,7 @@ void InitProcesConnection(){
     mqd_t mq_listener, new_mq_Proces_MOPS;
     struct mq_attr attr;
     struct timeval tv;
-    int bytes_read, fdmax, rv, i;
+    int fdmax, rv, i;
     fd_set master, read_fd;  //master fd list, temp fd list for select()
 	FD_ZERO(&master);
 	FD_ZERO(&read_fd);
@@ -501,7 +500,7 @@ int ReceiveFromProcess(int file_de){
 	int bytes_read, ClientID;
     uint8_t temp[MAX_QUEUE_SIZE+1];
 
-	bytes_read = mq_receive(file_de, temp, MAX_QUEUE_SIZE, NULL);
+	bytes_read = mq_receive(file_de, (char*)temp, MAX_QUEUE_SIZE, NULL);
 	if(bytes_read == -1){
 		CloseProcessConnection(file_de);
 	}
@@ -521,7 +520,7 @@ int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de){
 
 	mq_getattr(file_de, &attr);
 	if(attr.mq_curmsgs < MAX_QUEUE_MESSAGE)
-		return mq_send(file_de, buffer, buffLen, 0);
+		return mq_send(file_de, (char*)buffer, buffLen, 0);
 	return 0;
 }
 
@@ -535,15 +534,15 @@ int ServeNewProcessConnection(fd_set *set, int listener_fd){
     int new_mq_Proces_MOPS, new_mq_MOPS_Proces;
 
     memset(buffer, 0, MAX_QUEUE_SIZE+1);
-    if(mq_receive(listener_fd, buffer, MAX_QUEUE_SIZE, NULL) > 0){
-    	temp = strlen(buffer);
+    if(mq_receive(listener_fd, (char*)buffer, MAX_QUEUE_SIZE, NULL) > 0){
+    	temp = strlen((char*)buffer);
     	buffer[temp] = 'b';
-    	new_mq_Proces_MOPS = mq_open(buffer, O_RDONLY);
+    	new_mq_Proces_MOPS = mq_open((char*)buffer, O_RDONLY);
 		if( !((mqd_t)-1 != new_mq_Proces_MOPS) )
 			perror("MQueue Open Proces_MOPS");
 
     	buffer[temp] = 'a';
-		new_mq_MOPS_Proces = mq_open(buffer, O_WRONLY);
+		new_mq_MOPS_Proces = mq_open((char*)buffer, O_WRONLY);
 		if( !((mqd_t)-1 != new_mq_MOPS_Proces) )
 			perror("MQueue Open MOPS_Proces");
 
@@ -575,7 +574,7 @@ void InitProcesConnection(){
 }
 #endif //TARGET_DEVICE == RTnode
 
-void CloseProcessConnection(file_de){
+void CloseProcessConnection(int file_de){
 	int ClientID;
 	printf("Proces ubijam!\n");
 	ClientID = FindClientIDbyFileDesc(file_de);
@@ -647,7 +646,7 @@ void FindClientsIDbyTopic(int *clientsID, uint8_t *topic, uint16_t topicLen){
 		clientsID[i] = -1;
 
 	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++){
-		if(strncmp(sub_list[i].Topic, topic, topicLen) == 0){
+		if(strncmp((char*)sub_list[i].Topic, (char*)topic, topicLen) == 0){
 			clientsID[counter] = sub_list[i].ClientID;
 			counter++;
 		}
@@ -730,7 +729,7 @@ int AddToSubscribersList(uint8_t *topic, uint16_t topicLen, int ClientID){
 	uint16_t tempTopicLen;
 
 	for(i=0; i<MAX_NUMBER_OF_SUBSCRIPTIONS; i++){
-		if(sub_list[i].ClientID==ClientID && strncmp(sub_list[i].Topic, topic, topicLen)==0 && sub_list[i].Topic[0]!=0){
+		if(sub_list[i].ClientID==ClientID && strncmp((char*)sub_list[i].Topic, (char*)topic, topicLen)==0 && sub_list[i].Topic[0]!=0){
 			return -1; //This subscription for that client already exists
 		}
 	}
