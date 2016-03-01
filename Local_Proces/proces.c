@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -18,9 +19,8 @@
 int main(void)
 {
     int s;
-    int i;
     uint8_t array[100];
-    uint8_t *topic[]={"jakisTopic", "kupa"};
+    char *topic[2]={"jakisTopic", "kupa"};
     uint8_t Qos[]={1, 2};
 
 	s = connectMOPS();
@@ -31,7 +31,7 @@ int main(void)
 
 #if TYPE == SEN
 		usleep(200000);
-		publishMOPS(s, "jakisTopic", "Pierwsza wiadomosx");
+		publishMOPS(s, (uint8_t*)"jakisTopic", (uint8_t*)"Pierwsza wiadomosc");
 #endif
 #if TYPE == REC
 		i = readMOPS(array, 100);

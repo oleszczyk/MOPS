@@ -60,11 +60,11 @@ int connectMOPS(){
 }
 
 int sendToMOPS(uint8_t *buffer, uint16_t buffLen){
-	return mq_send(mops_queue.ProcesToMOPS_fd, buffer, buffLen, 0);
+	return mq_send(mops_queue.ProcesToMOPS_fd, (char*)buffer, buffLen, 0);
 }
 
 int recvFromMOPS(uint8_t *buffer, uint16_t buffLen){
-	return mq_receive(mops_queue.MOPSToProces_fd, buffer, buffLen, NULL);
+	return mq_receive(mops_queue.MOPSToProces_fd, (char*)buffer, buffLen, NULL);
 }
 #endif //TARGET_DEVICE == Linux
 
