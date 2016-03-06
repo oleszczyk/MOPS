@@ -8,8 +8,8 @@
 #include <string.h>
 #include <time.h>
 
-#include "MOPS.h"
 #include "MQTT.h"
+#include "MOPS.h"
 #include "MQTTConf.h"
 
 
@@ -61,7 +61,6 @@ void Init_TopicName(TopicName *TName, uint8_t *Topic){
 	TName->LSB_Length = LSB_temp;
 	TName->Topic = Topic;
 }
-
 
 /* Function return length of applied bytes.
  */
@@ -297,7 +296,7 @@ uint16_t BuildSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, 
 
 	//**** Payload part *****//
 	for (i=0; i<TopicNo; i++){
-		tempLen = strlen((char*)(Topic[i]));
+		tempLen = strlen((char*)Topic[i]);
 		u16ToMSBandLSB(tempLen, &MSB_temp, &LSB_temp);
 		Buffer[index] = MSB_temp;
 		Buffer[index+1] = LSB_temp;
@@ -389,7 +388,7 @@ uint16_t BuildUnSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic
 
 	//**** Payload part *****//
 	for (i=0; i<TopicNo; i++){
-		tempLen = strlen((char*)Topic[i]);
+		tempLen = strlen((char*)(Topic[i]));
 		u16ToMSBandLSB(tempLen, &MSB_temp, &LSB_temp);
 		Buffer[index] = MSB_temp;
 		Buffer[index+1] = LSB_temp;

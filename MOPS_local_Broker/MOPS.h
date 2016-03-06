@@ -1,23 +1,56 @@
 /*
  * MOPS.h
  *
- *  Created on: Jan 31, 2016
+ *  Created on: Jan 20, 2016
  *      Author: rudy
  */
 
 #ifndef MOPS_H_
 #define MOPS_H_
-
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <mqueue.h>
-#include "MOPS_RTnet_Con.h"
 #include "MQTT.h"
 
+
+#define Linux  1
+#define RTnode 2
+
+//***************** General Settings *********************
+#define TARGET_DEVICE Linux   //or RTNODE
 #define MAX_PROCES_CONNECTION 10
 #define MAX_QUEUE_SIZE 100
 #define MAX_QUEUE_MESSAGE 10
+//***************** General Settings *********************
+
+//***************MOPS - RTnet Settings********************
+#define PORT 1883
+#define UDP_MAX_SIZE 512
+
+#define IPADDR     "10.255.255.255"
+#define IPADDR_LO  "127.0.0.1"
+#define MAX_TOPIC_LENGTH             10      //max is 2^16-1
+#define MAX_MESSAGE_LENGTH			 100	 //max is 2^16-1
+#define MAX_NUMBER_OF_TOPIC          8       //max is 2^16-1
+#define MAX_NUMBER_OF_SUBSCRIPTIONS  100     //max is 2^16-1
+//***************MOPS - RTnet Settings********************
+
+
+#if TARGET_DEVICE == Linux
+#define QUEUE_NAME "/MOPS_path"
+
+typedef struct MOPS_Queue{
+	mqd_t  	ProcesToMOPS_fd;
+	mqd_t  	MOPSToProces_fd;
+}MOPS_Queue;
+#endif //TARGET_DEVICE == Linux
+#if TARGET_DEVICE == RTnode
+typedef struct MOPS_Queue{
+
+}MOPS_Queue;
+#endif //TARGET_DEVICE == RTnode
+
 
 typedef struct TopicID{
 	uint8_t Topic[MAX_TOPIC_LENGTH+1];
@@ -37,23 +70,19 @@ enum MOPS_STATE{
 };
 
 
-#if TARGET_DEVICE == Linux
-#define QUEUE_NAME "/MOPS_path"
+// ***************   Funtions for local processes   ***************//
+int connectToMOPS();
+int sendToMOPS(char *buffer, uint16_t buffLen);
+int recvFromMOPS(char *buffer, uint16_t buffLen);
 
-typedef struct MOPS_Queue{
-	mqd_t  	ProcesToMOPS_fd;
-	mqd_t  	MOPSToProces_fd;
-}MOPS_Queue;
-#endif //TARGET_DEVICE == Linux
-
-#if TARGET_DEVICE == RTnode
-#define MAX_PROCES_CONNECTION 10 //number of local processes connected to MOPS broker
-typedef struct MOPS_Queue{
-
-}MOPS_Queue;
-#endif //TARGET_DEVICE == RTnode
+void publishMOPS(int fd, char *Topic, char *Message);
+void subscribeMOPS(char **TopicList, uint8_t *QosList, uint8_t NoOfTopics);
+int readMOPS(char *buf, uint8_t length);
+int InterpretFrame(char *messageBuf, char *frameBuf, uint8_t frameLen);
+// ***************   Funtions for local processes   ***************//
 
 
+// ***************   Funtions for local MOPS broker   ***************//
 void threadSendToRTnet();
 void threadRecvFromRTnet();
 
@@ -100,16 +129,15 @@ int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de);
 int ServeSendingToProcesses();
 int FindClientIDbyFileDesc(int file_de);
 void FindClientsIDbyTopic(int *clientsID, uint8_t *topic, uint16_t topicLen);
-
-
-void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);
-uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB);
-
 void AnalyzeProcessMessage(uint8_t *buffer, int bytes_wrote, int ClientID);
 void ServePublishMessage(uint8_t *buffer, int FrameLen);
 void ServeSubscribeMessage(uint8_t *buffer, int FrameLen, int ClientID);
 void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen);
 void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID);
 void MoveWaitingToFinal();
+// ***************   Funtions for local MOPS broker   ***************//
+
+void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB);
+uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB);
 
 #endif /* MOPS_H_ */

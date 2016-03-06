@@ -4,18 +4,21 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../MQTT.c \
 ../MOPS.c \
+../MQTT.c \
+../MOPS_RTnet_Con.c \
 ../proces.c 
 
 OBJS += \
-./MQTT.o \
 ./MOPS.o \
+./MQTT.o \
+./MOPS_RTnet_Con.o \
 ./proces.o 
 
 C_DEPS += \
-./MQTT.d \
 ./MOPS.d \
+./MQTT.d \
+./MOPS_RTnet_Con.d \
 ./proces.d 
 
 
@@ -23,7 +26,7 @@ C_DEPS += \
 %.o: ../%.c
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C Compiler'
-	gcc -O3 -I/usr/xenomai/include -D_GNU_SOURCE -D_REENTRANT -D__XENO__ -I/usr/xenomai/include/posix -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o "$@" "$<"
+	gcc -O3 -I/usr/local/rtnet/include -I/usr/xenomai/include -D_GNU_SOURCE -D_REENTRANT -D__XENO__ -I/usr/xenomai/include/posix -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
