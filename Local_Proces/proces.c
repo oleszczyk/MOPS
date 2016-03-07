@@ -34,14 +34,13 @@ int main(void)
 #if TYPE == SEN
 int main(void)
 {
-    int s;
     char array[100];
     uint8_t Qos[]={1, 2};
 
-	s = connectToMOPS();
+	connectToMOPS();
 	for(;;){
 		usleep(100000);
-		publishMOPS(s, "jakisTopic", "Pierwsza wiadomosc");
+		publishMOPS("jakisTopic", "Pierwsza wiadomosc");
 	}
     return 0;
 }

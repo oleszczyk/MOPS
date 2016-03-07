@@ -1,13 +1,13 @@
 /**
+ *	Implementation for set of function for broker-broker communication.
+ *	Communication is based on UDP transfer. Every broker is sending its
+ *	UDP packet to broadcast address and to yourself on port 1883.
+ *
  *	@file	MOPS_RTnet_Con.c
  *	@date	Jan 30, 2016
  *	@author	Michal Oleszczyk
  *	@brief	File containing function responsible for
  *			communication between MOPS brokers in RTnet.
- *
- *	Implementation for set of function for broker-broker communication.
- *	Communication is based on UDP transfer. Every broker is sending its
- *	UDP packet to broadcast address and to yourself on port 1883.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,11 +28,12 @@
 #include <limits.h>
 
 
-static struct sockaddr_in rec_addr;
-static struct sockaddr_in sd_addr_b;
-static struct sockaddr_in sd_addr_l;
-int get_sock;
-int bcast_sock;
+static struct sockaddr_in rec_addr; /**< Struct containing socket address for receiving. */
+static struct sockaddr_in sd_addr_b;/**< Struct containing socket address for sending broadcast. */
+static struct sockaddr_in sd_addr_l;/**< Struct containing socket address for sending loop-back. */
+
+int get_sock; /**< Socket for receiving packet from RTnet. */
+int bcast_sock; /**< Socket for broadcasting packets to RTnet. */
 
 #if TARGET_DEVICE == Linux
 /**
@@ -78,7 +79,7 @@ void connectToRTnet(){
  * @param buflen	Length of buffer in bytes for sending.
  *
  * @pre	Nothing.
- * @post Data are send as broadcast UDP frame into RTnet and also to myself.
+ * @post Data are send as a broadcast UDP frame into RTnet and also to myself.
  */
 void sendToRTnet(uint8_t *buf, int buflen){
 	int write = 0;
@@ -199,6 +200,7 @@ void unlock_mutex(SemaphoreHandle_t *lock){
 /**
  * @brief Function for creating MOPS protocol "Topic Request" header.
  * "Topic Request" header shape looks like:
+ * <pre>
  * +-+-+-+-+-+-+-+-+
  * |0|0|0|0|0|0|0|1|  <- Topic Request type: 1
  * +-+-+-+-+-+-+-+-+
@@ -206,7 +208,7 @@ void unlock_mutex(SemaphoreHandle_t *lock){
  * +-+-+-+-+-+-+-+-+
  * |0|0|0|0|0|0|0|0|  <- Remaining header length less significant byte: 0
  * +-+-+-+-+-+-+-+-+
- *
+ * </pre>
  * @param Buffer Buffer where header will be stored.
  * @param BufferLen Maximal buffer length which can be overridden.
  * @return Length of buffer (in bytes) which has been overridden - number of written bytes.
@@ -230,6 +232,7 @@ uint16_t buildTopicRequestMessage(uint8_t *Buffer, int BufferLen){
 /**
  * @brief Function for creating MOPS protocol "New Topic" header.
  * "New Topic" header shape looks like:
+ * <pre>
  * +-+-+-+-+-+-+-+-+
  * |0|0|0|0|0|0|1|0|  <- Topic Request type: 2
  * +-+-+-+-+-+-+-+-+
@@ -247,10 +250,11 @@ uint16_t buildTopicRequestMessage(uint8_t *Buffer, int BufferLen){
  * +-+-+-+-+-+-+-+-+
  * |X|X|X|X|X|X|X|X|  <- First character of topic string.
  * +-+-+-+-+-+-+-+-+
- * 		......
+ *      ......
  * +-+-+-+-+-+-+-+-+
  * |X|X|X|X|X|X|X|X|  <- Last character of topic string..
  * +-+-+-+-+-+-+-+-+
+ * </pre>
  * @param Buffer Buffer where header will be stored.
  * @param BufferLen Maximal buffer length which can be overridden.
  * @param Topics Pointer to array containing topics in string format.
@@ -302,6 +306,7 @@ uint16_t buildNewTopicMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topics, 
 /**
  * @brief Function for creating MOPS protocol "Nothing" header.
  * "Nothing" header shape looks like:
+ * <pre>
  * +-+-+-+-+-+-+-+-+
  * |0|0|0|0|0|0|1|1|  <- Topic Request type: 3
  * +-+-+-+-+-+-+-+-+
@@ -309,7 +314,7 @@ uint16_t buildNewTopicMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topics, 
  * +-+-+-+-+-+-+-+-+
  * |0|0|0|0|0|0|0|0|  <- Remaining header length less significant byte: 0
  * +-+-+-+-+-+-+-+-+
- *
+ * </pre>
  * @param Buffer Buffer where header will be stored.
  * @param BufferLen Maximal buffer length which can be overridden.
  * @return Length of buffer (in bytes) which has been overridden - number of written bytes.

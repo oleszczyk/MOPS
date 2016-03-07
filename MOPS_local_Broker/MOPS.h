@@ -13,7 +13,6 @@
 #include <mqueue.h>
 #include "MQTT.h"
 
-
 #define Linux  1
 #define RTnode 2
 
@@ -36,57 +35,51 @@
 #define MAX_NUMBER_OF_SUBSCRIPTIONS  100     //max is 2^16-1
 //***************MOPS - RTnet Settings********************
 
-
 #if TARGET_DEVICE == Linux
 #define QUEUE_NAME "/MOPS_path"
 
-typedef struct MOPS_Queue{
-	mqd_t  	ProcesToMOPS_fd;
-	mqd_t  	MOPSToProces_fd;
-}MOPS_Queue;
+typedef struct MOPS_Queue {
+	mqd_t ProcesToMOPS_fd;
+	mqd_t MOPSToProces_fd;
+} MOPS_Queue;
 #endif //TARGET_DEVICE == Linux
 #if TARGET_DEVICE == RTnode
-typedef struct MOPS_Queue{
+typedef struct MOPS_Queue {
 
 }MOPS_Queue;
 #endif //TARGET_DEVICE == RTnode
-
-
-typedef struct TopicID{
-	uint8_t Topic[MAX_TOPIC_LENGTH+1];
+typedef struct TopicID {
+	uint8_t Topic[MAX_TOPIC_LENGTH + 1];
 	uint16_t ID;
-	uint8_t LocalTopic;	//flag - if 1 then topic has to be send to RTnet
-}TopicID;
+	uint8_t LocalTopic; //flag - if 1 then topic has to be send to RTnet
+} TopicID;
 
-typedef struct SubscriberList{
-	uint8_t Topic[MAX_TOPIC_LENGTH+1];
+typedef struct SubscriberList {
+	uint8_t Topic[MAX_TOPIC_LENGTH + 1];
 	int ClientID;
-}SubscriberList;
+} SubscriberList;
 
-enum MOPS_STATE{
-	SEND_NOTHING = 1,
-	SEND_REQUEST,
-	SEND_TOPIC_LIST,
+enum MOPS_STATE {
+	SEND_NOTHING = 1, SEND_REQUEST, SEND_TOPIC_LIST,
 };
-
 
 // ***************   Funtions for local processes   ***************//
 int connectToMOPS();
 int sendToMOPS(char *buffer, uint16_t buffLen);
 int recvFromMOPS(char *buffer, uint16_t buffLen);
 
-void publishMOPS(int fd, char *Topic, char *Message);
+void publishMOPS(char *Topic, char *Message);
 void subscribeMOPS(char **TopicList, uint8_t *QosList, uint8_t NoOfTopics);
 int readMOPS(char *buf, uint8_t length);
 int InterpretFrame(char *messageBuf, char *frameBuf, uint8_t frameLen);
 // ***************   Funtions for local processes   ***************//
 
-
 // ***************   Funtions for local MOPS broker   ***************//
 void threadSendToRTnet();
 void threadRecvFromRTnet();
 
-void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes, int nbytes);
+void AddClientIDToPacket(uint8_t *buf, uint8_t ClientID, int *WrittenBytes,
+		int nbytes);
 void InitTopicList(TopicID list[]);
 void SubListInit(SubscriberList *sublist);
 
@@ -95,7 +88,8 @@ uint16_t SendTopicRequestMessage();
 uint16_t SendTopicList(TopicID list[]);
 uint16_t SendLocalTopics(TopicID list[]);
 
-uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen, uint16_t id);
+uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen,
+		uint16_t id);
 void AnalyzeIncomingUDP(uint8_t *Buffer, int written_bytes);
 void UpdateTopicList(uint8_t *Buffer, int BufferLen);
 uint8_t ApplyIDtoNewTopics();
