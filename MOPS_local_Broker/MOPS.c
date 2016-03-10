@@ -326,7 +326,7 @@ void DeleteProcessFromSubList(int ClientID, SubscriberList *sublist) {
 /**
  * @brief Function representing receiving from RTnet functionality.
  *
- * Receiving packets is closed in infinite loop so this particular
+ * Receiving frames is closed in infinite loop so this particular
  * function should be started in separated thread.
  *
  * @pre Here are made changes of #input_buffer so also mutex #input_lock
@@ -343,9 +343,9 @@ void threadRecvFromRTnet() {
 }
 
 /**
- * @brief Function for sending packets to RTnet.
+ * @brief Function for sending frames to RTnet.
  *
- * Sending packets is closed in infinite loop so this particular
+ * Sending frames is closed in infinite loop so this particular
  * function should be started in separated thread.
  *
  */
@@ -404,7 +404,7 @@ void threadSendToRTnet() {
  *
  * @return Number of bytes added to a #output_buffer.
  * @pre #output_buffer has to has some empty space to write "Nothing" header.
- * Otherwise last packet in buffer will be malformed.
+ * Otherwise last frame in buffer will be malformed.
  */
 uint16_t SendEmptyMessage() {
 	uint8_t tempLen = 0;
@@ -430,7 +430,7 @@ uint16_t SendEmptyMessage() {
  *
  * @return Number of bytes added to a #output_buffer.
  * @pre #output_buffer has to has some empty space to write "Topic Request" header.
- * Otherwise last packet in buffer will be malformed.
+ * Otherwise last frame in buffer will be malformed.
  */
 uint16_t SendTopicRequestMessage() {
 	uint8_t tempLen = 0;
@@ -458,7 +458,7 @@ uint16_t SendTopicRequestMessage() {
  * @param[in] list List containing structures linking topics name with its ID.
  * @return Number of bytes added to a #output_buffer.
  * @pre #output_buffer has to has some empty space to write "Topic Request" header.
- * Otherwise last packet in buffer will be malformed.
+ * Otherwise last frame in buffer will be malformed.
  */
 uint16_t SendTopicList(TopicID list[]) {
 	int i = 0, counter = 0, tempLen;
@@ -502,7 +502,7 @@ uint16_t SendTopicList(TopicID list[]) {
  * @param[in] list List containing structures linking topics name with its ID.
  * @return Number of bytes added to a #output_buffer.
  * @pre #output_buffer has to has some empty space to write "Topic Request" header.
- * Otherwise last packet in buffer will be malformed.
+ * Otherwise last frame in buffer will be malformed.
  */
 uint16_t SendLocalTopics(TopicID list[]) {
 	int i = 0, counter = 0, tempLen;
@@ -916,6 +916,10 @@ void InitProcesConnection() {
 
 /**
  * @brief Receiving data from connected local processes.
+ *
+ * This is high level function used for react when select() function
+ * return that file descriptor (file_de variable) if ready to read some data.
+ *
  * @param[in] file_de File descriptor of queue from which data can be read.
  * @return 0 - in every case (still TODO).
  */
@@ -1087,9 +1091,16 @@ int ServeSendingToProcesses() {
 }
 
 /**
- * @brief
- * @param[in] Buffer
- * @param[in] written_bytes
+ * @brief Preparing (and sending after that) MQTT frames
+ * extracted from whole frame received from RTnet.
+ *
+ * Whole frame (without MOPS header) is divided to set of MQTT frames and
+ * transmit to particular local process.
+ *
+ * @param[in] Buffer Buffer containing all raw MQTT frames.
+ * @param[in] written_bytes Number of bytes which Buffer contains.
+ * @post After preparing nice MQTT frames, this function is firing
+ * sending them to particular process.
  */
 void PrepareFrameToSendToProcess(uint8_t *Buffer, int written_bytes) {
 	uint16_t topicID, topicLen, index = 0;
@@ -1120,6 +1131,20 @@ void PrepareFrameToSendToProcess(uint8_t *Buffer, int written_bytes) {
 					mops_queue[clientID[i]].MOPSToProces_fd);
 }
 
+/**
+ * @brief Recognizing what processes subscribes given topic name.
+ *
+ * As MOPS can integrate many clients and many different topic, there is
+ * possibility to many clients subscribe same topic. If we want to send them correct
+ * MQTT frame we need to know list of subscribers.
+ *
+ * @param[out] clientsID List of clients ID which subscribe topic. It has to have
+ * at least MAX_PROCES_CONNECTION length.
+ * @param[in] topic Array of chars containing topic name (as a string).
+ * @param[in] topicLen Length of topic name.
+ * @post ClientsID variable has to be at least MAX_PROCES_CONNECTION, and it will be
+ * erased firstly (all fields set to -1).
+ */
 void FindClientsIDbyTopic(int *clientsID, uint8_t *topic, uint16_t topicLen) {
 	int i;
 	int counter = 0;
@@ -1134,6 +1159,16 @@ void FindClientsIDbyTopic(int *clientsID, uint8_t *topic, uint16_t topicLen) {
 	}
 }
 
+/**
+ * @brief Taking particular client ID by file descriptor from 'connection list'.
+ *
+ * When we received some request (for example subscription request) we need to
+ * connect file description from which we read those MQTT frame to one client ID.
+ * That information is stored in 'communication list'.
+ *
+ * @param[in] file_de File descriptor for which we want to obtain client ID.
+ * @return Client ID which is using given file descriptor.
+ */
 int FindClientIDbyFileDesc(int file_de) {
 	int i = 0;
 	for (i = 0; i < MAX_NUMBER_OF_SUBSCRIPTIONS; i++)
@@ -1143,6 +1178,18 @@ int FindClientIDbyFileDesc(int file_de) {
 	return -1;
 }
 
+/**
+ * @brief Mechanism for recognizing if MQTT frames in buffer are
+ * a 'publish' or 'subscribe' requests.
+ *
+ * Function is taking all not read yet MQTT frames from process and decide
+ * if they should be interpreted as 'subscribe' or 'publish' packets. Then
+ * pass them separately to particular function responsible for serving them.
+ *
+ * @param[in] buffer Buffer containing read MQTT packets.
+ * @param[in] bytes_wrote Number of bytes which was written to buffer.
+ * @param[in] ClientID Client ID of process from which that MQTT frames were read.
+ */
 void AnalyzeProcessMessage(uint8_t *buffer, int bytes_wrote, int ClientID) {
 	FixedHeader FHeader;
 	uint8_t HeadLen = 0;
@@ -1169,6 +1216,18 @@ void AnalyzeProcessMessage(uint8_t *buffer, int bytes_wrote, int ClientID) {
 	}
 }
 
+/**
+ * @brief Serving one single pure MQTT 'publish' packet.
+ *
+ * Here single MQTT 'publish' frame is separated into a parts and analyzed
+ * very carefully.
+ *
+ * @param[in] buffer Buffer containing one single MQTT frame.
+ * @param[in] FrameLen Number of bytes which that frame takes.
+ * @post After that function frame is copied into #output_buffer
+ * (if topic has been already known) or to #waiting_output_buffer
+ * (if we do now know yet what is topic ID).
+ */
 void ServePublishMessage(uint8_t *buffer, int FrameLen) {
 	uint8_t topicTemp[MAX_TOPIC_LENGTH + 1];
 	uint16_t TopicLen, index = 0, tempTopicLength;
@@ -1197,6 +1256,18 @@ void ServePublishMessage(uint8_t *buffer, int FrameLen) {
 	}
 }
 
+/**
+ * @brief Serving one single pure MQTT 'subscribe' packet.
+ *
+ * Here single MQTT 'subscribe' frame is separated into a parts and analyzed
+ * very carefully.
+ *
+ * @param[in] buffer Buffer containing one single MQTT frame.
+ * @param[in] FrameLen Number of bytes which that frame takes.
+ * @param[in] ClientID ID of client which sent 'subscribe' request.
+ * @post After that function new client is added to 'subscription list'
+ * (if there is enough place of course).
+ */
 void ServeSubscribeMessage(uint8_t *buffer, int FrameLen, int ClientID) {
 	uint16_t TopicLen, index = 0;
 
@@ -1209,6 +1280,15 @@ void ServeSubscribeMessage(uint8_t *buffer, int FrameLen, int ClientID) {
 	} while (index < FrameLen);
 }
 
+/**
+ * @brief Apply new subscription: connect given client ID with given topic name.
+ * @param[in] topic Topic name (as a string).
+ * @param[in] topicLen Topic name length (in bytes).
+ * @param[in] ClientID ID of client which should be added to 'subscription list'.
+ * @return -1 - if subscription already exists.\n
+ * 0 - if there is no place in 'subscription list' to store new one.\n
+ * >0 - if subscription has been added successfully.\n
+ */
 int AddToSubscribersList(uint8_t *topic, uint16_t topicLen, int ClientID) {
 	int i = 0;
 	uint16_t tempTopicLen;
@@ -1231,6 +1311,19 @@ int AddToSubscribersList(uint8_t *topic, uint16_t topicLen, int ClientID) {
 	return 0; //There is no place to store subscription!
 }
 
+
+/**
+ * @brief Push buffer content to a #waiting_output_buffer.
+ *
+ * This is used when topic is only 'candidate' (do not has any ID
+ * yet) so frame has to be stored in 'waiting tab' and waiting
+ * for ID applying to that topic.
+ *
+ * @param[in] buffer Buffer containing frame to push it to #waiting_output_buffer.
+ * @param[in] FrameLen Number of bytes which should be copied into waiting tab.
+ * @post Frame is added to #waiting_output_buffer this is why for that operation
+ * mutex #waiting_output_lock is blocked.
+ */
 void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen) {
 	lock_mutex(&waiting_output_lock);
 	if (waiting_output_index <= (uint16_t) (UDP_MAX_SIZE * 9) / 10) {
@@ -1240,6 +1333,17 @@ void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen) {
 	unlock_mutex(&waiting_output_lock);
 }
 
+/**
+ * @brief Push buffer content to a #output_buffer.
+ *
+ * This is used when topic as its ID so frame has to be stored
+ * in array ready to send to RTnet.
+ *
+ * @param[in] buffer Buffer containing frame to push it to #output_buffer.
+ * @param[in] FrameLen Number of bytes which should be copied into final tab.
+ * @post Frame is added to #output_buffer this is why for that operation
+ * mutex #output_lock is blocked.
+ */
 void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID) {
 	uint8_t tempBuff[MAX_QUEUE_SIZE];
 	uint8_t MSBtemp, LSBtemp, headLen, index = 0;
@@ -1272,6 +1376,18 @@ void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID) {
 	unlock_mutex(&output_lock);
 }
 
+/**
+ * @brief Reinterpreting #waiting_output_buffer content.
+ *
+ * Just before sending new data into RTnet, broker apply new ID
+ * to 'candidate' topics. That is way some of those topic messages
+ * can wait in #waiting_output_buffer for sending them. This function
+ * once again interpret them and move into final buffer such frames
+ * for which topics are already known.
+ *
+ * @post This function copy all content of #waiting_output_buffer into
+ * temporary buffer. That is why #waiting_output_buffer is erased.
+ */
 void MoveWaitingToFinal() {
 	uint8_t tempTab[UDP_MAX_SIZE];
 	uint16_t tempIndex = 0;
@@ -1287,6 +1403,14 @@ void MoveWaitingToFinal() {
 }
 // ***************   Funtions for MOPS broker   ***************//
 
+/**
+ * @brief Conversion uint16_t into two uint8_t values.
+ *
+ * @param[in] u16bit Value which has to be converted into most significant byte
+ * and less significant byte.
+ * @param[out] MSB Most significant byte of given value.
+ * @param[out] LSB Less significant byte of given value.
+ */
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB) {
 	uint16_t temp;
 	*LSB = (uint8_t) u16bit;
@@ -1294,6 +1418,13 @@ void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB) {
 	*MSB = (uint8_t) temp;
 }
 
+/**
+ * @brief Conversion two uint8_t values into uint16_t.
+ *
+ * @param[in] MSB Most significant byte of return value.
+ * @param[in] LSB Less significant byte of return value.
+ * @return 16bit value which result of conversion MSB and LSB.
+ */
 uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB) {
 	uint16_t temp;
 	temp = MSB;
