@@ -1,8 +1,13 @@
-/*
- * MQTT.h
+/**
+ *	@brief Header file for MQTT protocol basic functionality.
  *
- *  Created on: Jan 16, 2016
- *      Author: rudy
+ *	Implementation for set of MQTT basic functionalities. Most of them
+ *	is responsible for preparing MQTT headers, structures and payloads
+ *	(MQTT messages) in correct form.
+ *
+ *	@file	MQTT.h
+ *	@date	Jan 30, 2016
+ *	@author	Michal Oleszczyk
  */
 
 #ifndef MQTT_H_
@@ -74,31 +79,38 @@ typedef DummyStruct SubscribeVariableHeader;
 typedef DummyStruct UnSubscribeVariableHeader;
 // **** Subscribe structures **** //
 
-
+/**
+ * @enum MESSAGE_TYPE
+ * @brief Enumerator of available MQTT message types.
+ */
 enum MESSAGE_TYPE{
-	CONNECT = 1,	// done
-	CONNACK,		// done
-	PUBLISH,		// done
-	PUBACK,			// done
-	PUBREC,			// done
-	PUBREL,			// done
-	PUBCOMP,		// done
-	SUBSCRIBE,		// done
-	SUBACK,			// done
-	UNSUBSCRIBE,	// done
-	UNSUBACK,		// done
-	PINGREQ,
-	PINGRESP,
-	DISCONNECT,
+	CONNECT = 1,	//!< CONNECT message type
+	CONNACK,		   //!< CONNACK message type
+	PUBLISH,		   //!< PUBLISH message type
+	PUBACK,			   //!< PUBACK message type
+	PUBREC,			   //!< PUBREC message type
+	PUBREL,			   //!< PUBREL message type
+	PUBCOMP,		   //!< PUBCOMP message type
+	SUBSCRIBE,		 //!< SUBSCRIBE message type
+	SUBACK,			   //!< SUBACK message type
+	UNSUBSCRIBE,	//!< UNSUBSCRIBE message type
+	UNSUBACK,		  //!< UNSUBACK message type
+	PINGREQ,     //!< PINGREQ message type
+	PINGRESP,    //!< PINGRESP message type
+	DISCONNECT,  //!< DISCONNECT message type
 };
 
+/**
+ * @enum CONNACK_RETURN_CODE
+ * @brief List of available MQTT return codes.
+ */
 enum CONNACK_RETURN_CODE{
-	CONNECTION_ACCEPTED = 0,
-	UNACCEPTABLE_PROTOCOL_VER,
-	IDENTIFIER_REJECTED,
-	SERVER_UNAVAILABLE,
-	BAD_NAME_OR_PASSWORD,
-	NOT_AUTHORIZED,
+	CONNECTION_ACCEPTED = 0,  //!< CONNECTION_ACCEPTED return code
+	UNACCEPTABLE_PROTOCOL_VER,//!< UNACCEPTABLE_PROTOCOL_VER return code
+	IDENTIFIER_REJECTED,      //!< IDENTIFIER_REJECTED return code
+	SERVER_UNAVAILABLE,       //!< SERVER_UNAVAILABLE return code
+	BAD_NAME_OR_PASSWORD,     //!< BAD_NAME_OR_PASSWORD return code
+	NOT_AUTHORIZED,           //!< NOT_AUTHORIZED return code
 };
 
 //Definitions for general purposes

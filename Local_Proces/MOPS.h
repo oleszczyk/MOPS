@@ -124,12 +124,9 @@ typedef struct SubscriberList {
  * should build and send to RTnet.
  * */
 enum MOPS_STATE {
-	/** Usual state - process as usual, receive and send messages. */
-	SEND_NOTHING = 1,
-	/** Init state - responsible for request for all known topics list. */
-	SEND_REQUEST,
-	/** Topics respond - set when some RTnet participant requested for full topic list.*/
-	SEND_TOPIC_LIST,
+	SEND_NOTHING = 1,/**< Usual state - process as usual, receive and send messages. */
+	SEND_REQUEST,    /**< Init state - responsible for request for all known topics list. */
+	SEND_TOPIC_LIST, /**< Topics respond - set when some RTnet participant requested for full topic list.*/
 };
 
 // ***************   Funtions for local processes   ***************//
@@ -156,30 +153,14 @@ uint16_t SendEmptyMessage();
 uint16_t SendTopicRequestMessage();
 uint16_t SendTopicList(TopicID list[]);
 uint16_t SendLocalTopics(TopicID list[]);
-
 uint8_t AddTopicToList(TopicID list[], uint8_t *topic, uint16_t topicLen,
 		uint16_t id);
 void AnalyzeIncomingUDP(uint8_t *Buffer, int written_bytes);
 void UpdateTopicList(uint8_t *Buffer, int BufferLen);
 uint8_t ApplyIDtoNewTopics();
-
 void AddTopicCandidate(uint8_t *topic, uint16_t topicLen);
-
-/*
- * return:
- *  ID (uint16_t value) if topic exist already in TopicList and is available
- *  0					if topic is candidate in TopicList
- *  -1					if topic is not available or candidate
- */
 int GetIDfromTopicName(uint8_t *topic, uint16_t topicLen);
-
-/*
- * POST: variable 'topic' is set as Topic with id 'id',
- * if there is not a topic in TopicList with that id
- * variable 'topic' is set to \0.
- */
 uint16_t GetTopicNameFromID(uint16_t id, uint8_t *topic);
-
 void InitProcesConnection();
 int ServeNewProcessConnection(fd_set *set, int listener_fd);
 void CloseProcessConnection(int file_de);

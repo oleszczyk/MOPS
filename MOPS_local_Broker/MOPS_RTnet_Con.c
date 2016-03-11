@@ -1,4 +1,7 @@
 /**
+ *	@brief	File containing function responsible for
+ *			communication between MOPS brokers in RTnet.
+ *
  *	Implementation for set of function for broker-broker communication.
  *	Communication is based on UDP transfer. Every broker is sending its
  *	UDP packet to broadcast address and to yourself on port 1883.
@@ -6,9 +9,8 @@
  *	@file	MOPS_RTnet_Con.c
  *	@date	Jan 30, 2016
  *	@author	Michal Oleszczyk
- *	@brief	File containing function responsible for
- *			communication between MOPS brokers in RTnet.
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -206,7 +208,7 @@ void unlock_mutex(SemaphoreHandle_t *lock){
  * +-+-+-+-+-+-+-+-+
  * |0|0|0|0|0|0|0|0|  <- Remaining header length most significant byte: 0
  * +-+-+-+-+-+-+-+-+
- * |0|0|0|0|0|0|0|0|  <- Remaining header length less significant byte: 0
+ * |0|0|0|0|0|0|0|0|  <- Remaining header length least significant byte: 0
  * +-+-+-+-+-+-+-+-+
  * </pre>
  * @param Buffer Buffer where header will be stored.
@@ -238,15 +240,15 @@ uint16_t buildTopicRequestMessage(uint8_t *Buffer, int BufferLen){
  * +-+-+-+-+-+-+-+-+
  * |X|X|X|X|X|X|X|X|  <- Remaining header length most significant byte.
  * +-+-+-+-+-+-+-+-+
- * |X|X|X|X|X|X|X|X|  <- Remaining header length less significant byte.
+ * |X|X|X|X|X|X|X|X|  <- Remaining header length least significant byte.
  * +-+-+-+-+-+-+-+-+
  * | Topic ID  MSB |  <- Topic identification number most significant byte.
  * +-+-+-+-+-+-+-+-+
- * | Topic ID  LSB |  <- Topic identification number less significant byte.
+ * | Topic ID  LSB |  <- Topic identification number least significant byte.
  * +-+-+-+-+-+-+-+-+
  * | Topic Len MSB |  <- Topic length most significant byte.
  * +-+-+-+-+-+-+-+-+
- * | Topic Len LSB |  <- Topic length less significant byte.
+ * | Topic Len LSB |  <- Topic length least significant byte.
  * +-+-+-+-+-+-+-+-+
  * |X|X|X|X|X|X|X|X|  <- First character of topic string.
  * +-+-+-+-+-+-+-+-+
@@ -312,7 +314,7 @@ uint16_t buildNewTopicMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topics, 
  * +-+-+-+-+-+-+-+-+
  * |0|0|0|0|0|0|0|0|  <- Remaining header length most significant byte: 0
  * +-+-+-+-+-+-+-+-+
- * |0|0|0|0|0|0|0|0|  <- Remaining header length less significant byte: 0
+ * |0|0|0|0|0|0|0|0|  <- Remaining header length least significant byte: 0
  * +-+-+-+-+-+-+-+-+
  * </pre>
  * @param Buffer Buffer where header will be stored.

@@ -1407,9 +1407,9 @@ void MoveWaitingToFinal() {
  * @brief Conversion uint16_t into two uint8_t values.
  *
  * @param[in] u16bit Value which has to be converted into most significant byte
- * and less significant byte.
+ * and least significant byte.
  * @param[out] MSB Most significant byte of given value.
- * @param[out] LSB Less significant byte of given value.
+ * @param[out] LSB Least significant byte of given value.
  */
 void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB) {
 	uint16_t temp;
@@ -1422,7 +1422,7 @@ void u16ToMSBandLSB(uint16_t u16bit, uint8_t *MSB, uint8_t *LSB) {
  * @brief Conversion two uint8_t values into uint16_t.
  *
  * @param[in] MSB Most significant byte of return value.
- * @param[in] LSB Less significant byte of return value.
+ * @param[in] LSB Least significant byte of return value.
  * @return 16bit value which result of conversion MSB and LSB.
  */
 uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB) {

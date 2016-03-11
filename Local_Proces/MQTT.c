@@ -1,9 +1,15 @@
-/*
- * MQTT.c
+/**
+ *	@brief File containing implementation of MQTT protocol basic functionality.
  *
- *  Created on: Jan 16, 2016
- *      Author: rudy
+ *	Implementation for set of MQTT basic function. Most of them
+ *	is responsible for preparing MQTT headers, structures and payloads
+ *  (MQTT messages) in correct form.
+ *
+ *	@file	MQTT.c
+ *	@date	Jan 30, 2016
+ *	@author	Michal Oleszczyk
  */
+
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -13,7 +19,12 @@
 #include "MQTTConf.h"
 
 
-
+/**
+ * @brief Initialization for fixed header of MQTT frame part.
+ * @param[out] FHeader Pointer to FixedHeader which will be initialized.
+ * @param[in] MessageType Type of MQTT message.
+ * @param[in] Flags Byte of flags needed for publish messages.
+ */
 void Init_FixedHeader(FixedHeader *FHeader, uint8_t MessageType, uint8_t Flags){
 	FHeader->MessageType = MessageType;
 	switch(MessageType)
@@ -32,7 +43,10 @@ void Init_FixedHeader(FixedHeader *FHeader, uint8_t MessageType, uint8_t Flags){
 	}
 }
 
-
+/**
+ * @brief Initialization of 'protocol name' structure.
+ * @param[out] PName Pointer to ProtocolName which will be initialized.
+ */
 void Init_ProtocolName(ProtocolName *PName){
 	PName->MSB_Length = 0;
 	PName->LSB_Length = 4;
@@ -42,6 +56,12 @@ void Init_ProtocolName(ProtocolName *PName){
 	PName->Name[3] = 'T';
 }
 
+/**
+ * @brief Initialization of ConnectVariableHeader structure.
+ * @param[out] CVHeader Pointer to ConnectVariableHeader which will be initialized.
+ * @param[in] Flags Byte containing flags for ConnectVariableHeader.
+ * @param[in] KeepAlive Keep alive value.
+ */
 void Init_ConnectVariableHeader(ConnectVariableHeader *CVHeader, uint8_t Flags, uint16_t KeepAlive){
 	uint8_t MSBtemp, LSBtemp;
 	Init_ProtocolName(&CVHeader->PName);
@@ -53,6 +73,11 @@ void Init_ConnectVariableHeader(ConnectVariableHeader *CVHeader, uint8_t Flags, 
 	CVHeader->MSB_KeepAlive = MSBtemp;
 }
 
+/**
+ * @brief Initialization of TopicName structure.
+ * @param[out] TName Pointer to TopicName which will be initialized.
+ * @param[in] Topic String containing particular topic name.
+ */
 void Init_TopicName(TopicName *TName, uint8_t *Topic){
 	uint16_t TopicLen = strlen((char*)Topic);
 	uint8_t MSB_temp, LSB_temp;
@@ -62,7 +87,12 @@ void Init_TopicName(TopicName *TName, uint8_t *Topic){
 	TName->Topic = Topic;
 }
 
-/* Function return length of applied bytes.
+/**
+ * @brief Function for building "Connection messages" of MQTT protocol.
+ * @param[out] Message Buffer into which built message will be written.
+ * @param[in] MessageLen Maximum length of given buffer.
+ * @param[in] KeepAlive Keep alive value.
+ * @return Length of applied bytes into given buffer.
  */
 uint16_t BuildConnectMessage(uint8_t *Message, int MessageLen, uint16_t KeepAlive){
 	FixedHeader FHeader;
@@ -154,6 +184,14 @@ uint16_t BuildConnectMessage(uint8_t *Message, int MessageLen, uint16_t KeepAliv
 	return (uint16_t) index;
 }
 
+/**
+ * @brief Preparing "Connection Acknowledgment message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] SessionPresent Flag means if session is already present.
+ * @param[in] ReturnCode Return code value.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildConnACKMessage(uint8_t *Buffer, int BufferLen, uint8_t SessionPresent, uint8_t ReturnCode){
 	FixedHeader FHeader;
 	int index = 0;
@@ -182,7 +220,16 @@ uint16_t BuildConnACKMessage(uint8_t *Buffer, int BufferLen, uint8_t SessionPres
 	return (uint16_t) index;
 }
 
-/* Function return length of applied bytes.
+/**
+ * @brief Preparing "Publish message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] Topic String containing topic name
+ * @param[in] Message String containing message payload.
+ * @param[in] DUP Duplicate flag value.
+ * @param[in] Retain Retain flag value.
+ * @param[out] packetID Value describing packet identification number of prepared frame.
+ * @return Length of applied bytes into given buffer.
  */
 uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topic, uint8_t* Message, uint8_t DUP, uint8_t Retain, uint16_t *packetID){
 	FixedHeader FHeader;
@@ -248,23 +295,59 @@ uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topi
 	return (uint16_t) index;
 }
 
+/**
+ * @brief Preparing "Publish Acknowledgment message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] packetID Value describing identification number of packet which we confirm.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildPubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
 	return ACKSimpleFunctionTemplate(PUBACK, Buffer, BufferLen, packetID);
 }
 
+/**
+ * @brief Preparing "Publish Received message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] packetID Value describing identification number of packet which we confirm.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildPubRecMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
 	return ACKSimpleFunctionTemplate(PUBREC, Buffer, BufferLen, packetID);
 }
 
+/**
+ * @brief Preparing "Publish Release message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] packetID Value describing identification number of packet which we confirm.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildPubRelMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
 	return ACKSimpleFunctionTemplate(PUBREL, Buffer, BufferLen, packetID);
 }
 
+/**
+ * @brief Preparing "Publish Complete message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] packetID Value describing identification number of packet which we confirm.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildPubCompMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
 	return ACKSimpleFunctionTemplate(PUBCOMP, Buffer, BufferLen, packetID);
 }
 
-/* Function return length of applied bytes.
+/**
+ * @brief Preparing "Subscribe message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] Topic List containing topics to subscribe (as a strings).
+ * @param[in] QoS Quality of services list in which we want to subscribe particular topic.
+ * @param[in] TopicNo Number of topics which we want to subscribe.
+ * @param[out] packetID Value describing packet identification number of prepared frame.
+ * @return Length of applied bytes into given buffer.
  */
 uint16_t BuildSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, uint8_t *QoS, uint8_t TopicNo, uint16_t *packetID){
 	FixedHeader FHeader;
@@ -317,6 +400,15 @@ uint16_t BuildSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, 
 }
 
 
+/**
+ * @brief Preparing "Subscribe Acknowledgment message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] packetID Value describing identification number of packet which we confirm.
+ * @param[in] QoSReturnCode List containing QoS for every requested subscription.
+ * @param[in] TopicNo Length of QoS list.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildSubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID, uint8_t *QoSReturnCode, uint8_t TopicNo){
 	FixedHeader FHeader;
 	SubscribeVariableHeader SVHeader;
@@ -357,7 +449,15 @@ uint16_t BuildSubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID, u
 	return (uint16_t) index;
 }
 
-
+/**
+ * @brief Preparing "Unsubscribe message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] Topic Topics name list which unsubscription is requested.
+ * @param[in] TopicNo Number of topics in a list.
+ * @param[out] packetID Value describing packet identification number of prepared frame.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildUnSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, uint8_t TopicNo, uint16_t *packetID){
 	FixedHeader FHeader;
 	UnSubscribeVariableHeader USVHeader;
@@ -407,13 +507,30 @@ uint16_t BuildUnSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic
 }
 
 
+/**
+ * @brief Preparing "Subscribe Acknowledgment message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] packetID Value describing identification number of packet which we confirm.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildUnSubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID){
 	return ACKSimpleFunctionTemplate(UNSUBACK, Buffer, BufferLen, packetID);
 }
 
-/*
- * Function used as a template for such packets like PubACK, PubRel, PubRec, PubComp, UnSubscribeACK.
- * Make packets containing only fixed header and variable header (packet ID).
+/**
+ * @brief Template for simple acknowledgment MQTT protocol messages.
+ *
+ * Function used as a template for such packets like: Subscribe Acknowledgment,
+ * Publish Complete, Publish Release, Publish Received, Publish Acknowledgment.
+ * Make packets containing only fixed header and variable header:
+ * two bytes of packetID.
+ *
+ * @param[in] MessageType Type of MQTT protocol message.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @param[in] packetID Value describing identification number of packet which we confirm.
+ * @return Length of applied bytes into given buffer.
  */
 uint16_t ACKSimpleFunctionTemplate(uint8_t MessageType, uint8_t *Buffer, int BufferLen, uint16_t packetID){
 	FixedHeader FHeader;
@@ -444,21 +561,46 @@ uint16_t ACKSimpleFunctionTemplate(uint8_t MessageType, uint8_t *Buffer, int Buf
 	return (uint16_t) index;
 }
 
+/**
+ * @brief Preparing "Ping Request message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildPingReq(uint8_t *Buffer, int BufferLen){
 	return VerySimpleBuildingTemplate(PINGREQ, Buffer, BufferLen);
 }
 
+/**
+ * @brief Preparing "Ping Response message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildPingResp(uint8_t *Buffer, int BufferLen){
 	return VerySimpleBuildingTemplate(PINGRESP, Buffer, BufferLen);
 }
 
+/**
+ * @brief Preparing "Disconnect message" of MQTT protocol.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @return Length of applied bytes into given buffer.
+ */
 uint16_t BuildDisconnect(uint8_t *Buffer, int BufferLen){
 	return VerySimpleBuildingTemplate(DISCONNECT, Buffer, BufferLen);
 }
 
-/*
+/**
+ * @brief Template for very simple MQTT protocol messages (PingReq, PingResp, Disconnect).
+ *
  * Function used as a template for such packets like PingReq, PingResp, Disconnect.
  * Make packets containing only fixed header.
+ *
+ * @param[in] MessageType Type of MQTT protocol message.
+ * @param[out] Buffer Buffer into which built message will be written.
+ * @param[in] BufferLen Maximum length of given buffer.
+ * @return Length of applied bytes into given buffer.
  */
 uint16_t VerySimpleBuildingTemplate(uint8_t MessageType, uint8_t *Buffer, int BufferLen){
 	FixedHeader FHeader;

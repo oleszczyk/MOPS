@@ -1,8 +1,12 @@
-/*
- * config.h
+/**
+ *	@brief Configuration file for MQTT protocol basic functionality.
  *
- *  Created on: Jan 16, 2016
- *      Author: rudy
+ *	Containing basic definitions which can help user in
+ *	standard MQTT configuration.
+ *
+ *	@file	MQTTConf.h
+ *	@date	Jan 30, 2016
+ *	@author	Michal Oleszczyk
  */
 
 #ifndef CONFIG_H_
