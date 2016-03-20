@@ -11,11 +11,6 @@
 
 #ifndef MOPS_H_
 #define MOPS_H_
-#include <stdint.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <mqueue.h>
-#include "MQTT.h"
 
 /** Linux target value. */
 #define Linux  1
@@ -35,7 +30,7 @@
 
 //***************MOPS - RTnet Settings********************
 /** MOPS protocol port. */
-#define PORT 1883
+#define MOPS_PORT 1883
 /** Size of send/receive buffers. */
 #define UDP_MAX_SIZE 512
 
@@ -54,6 +49,8 @@
 //***************MOPS - RTnet Settings********************
 
 #if TARGET_DEVICE == Linux
+#include <mqueue.h>
+
 /** Name of general queue (processes->broker). */
 #define QUEUE_NAME "/MOPS_path"
 
@@ -76,11 +73,26 @@ typedef struct MOPS_Queue {
 } MOPS_Queue;
 #endif //TARGET_DEVICE == Linux
 #if TARGET_DEVICE == RTnode
+#include "FreeRTOS.h"
+#include "timers.h"
+#include "task.h"
+#include "queue.h"
+#include "semphr.h"
+#include "rtnet.h"
+#include "rtnet_inet.h"
+
+QueueHandle_t GlobalProcesMopsQueue;
 
 typedef struct MOPS_Queue {
-
+	QueueHandle_t ProcesToMOPS_fd;
+	QueueHandle_t MOPSToProces_fd;
 }MOPS_Queue;
 #endif //TARGET_DEVICE == RTnode
+
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include "MQTT.h"
 
 /**
  * @struct TopicID
@@ -141,6 +153,7 @@ int InterpretFrame(char *messageBuf, char *frameBuf, uint8_t frameLen);
 // ***************   Funtions for local processes   ***************//
 
 // ***************   Funtions for local MOPS broker   ***************//
+int StartMOPSBroker();
 void threadSendToRTnet();
 void threadRecvFromRTnet();
 
@@ -162,7 +175,12 @@ void AddTopicCandidate(uint8_t *topic, uint16_t topicLen);
 int GetIDfromTopicName(uint8_t *topic, uint16_t topicLen);
 uint16_t GetTopicNameFromID(uint16_t id, uint8_t *topic);
 void InitProcesConnection();
+#if TARGET_DEVICE == Linux
 int ServeNewProcessConnection(fd_set *set, int listener_fd);
+#endif
+#if TARGET_DEVICE == RTnode
+QueueHandle_t ServeNewProcessConnection();
+#endif
 void CloseProcessConnection(int file_de);
 int AddToMOPSQueue(int MOPS_Proces_fd, int Proces_MOPS_fd);
 void MOPS_QueueInit(MOPS_Queue *queue);

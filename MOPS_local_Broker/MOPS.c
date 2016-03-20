@@ -9,7 +9,25 @@
  *	and broker logic in general. Communication is based on queues mechanism.
  *	Every process is sending its process ID to queue named QUEUE_NAME (on Linux based target).
  */
+#include "MOPS.h"
+#include "MQTT.h"
+#include "MOPS_RTnet_Con.h"
+
+#if TARGET_DEVICE == Linux
 #include <sys/select.h>
+#include <sys/un.h>
+#include <mqueue.h>
+#include <sys/mman.h>
+#endif //TARGET_DEVICE == Linux
+
+#if TARGET_DEVICE == RTnode
+#include "FreeRTOS.h"
+#include "timers.h"
+#include "task.h"
+#include "queue.h"
+#include "semphr.h"
+#endif //TARGET_DEVICE == RTnode
+
 #include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -17,17 +35,10 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/un.h>
 #include <sys/time.h>
-#include <mqueue.h>
 #include <rtnet.h>
 #include <rtmac.h>
-#include <sys/mman.h>
 #include <limits.h>
-
-#include "MOPS.h"
-#include "MQTT.h"
-#include "MOPS_RTnet_Con.h"
 
 // *************** Global variables for local processes *************** //
 static MOPS_Queue proc_mops_queue;
@@ -143,9 +154,51 @@ int recvFromMOPS(char *buffer, uint16_t buffLen) {
 #endif //TARGET_DEVICE == Linux
 
 #if TARGET_DEVICE == RTnode
-int connectMOPS() {}
-int sendToMOPS(int fd, uint8_t *buffer, uint16_t buffLen) {}
-int recvFromMOPS(int fd, uint8_t *buffer, uint16_t buffLen) {}
+int connectToMOPS() {
+
+	while(xRTnetWaitRedy(portMAX_DELAY) == pdFAIL){;}
+	proc_mops_queue.MOPSToProces_fd = xQueueCreate(MAX_QUEUE_SIZE, MAX_QUEUE_MESSAGE);
+	if (0 == proc_mops_queue.MOPSToProces_fd){
+		perror("MQueue Open MOPSToProces");
+		return 1;
+	}
+
+	proc_mops_queue.ProcesToMOPS_fd = xQueueCreate(MAX_QUEUE_SIZE, MAX_QUEUE_MESSAGE);
+	if (0 == proc_mops_queue.ProcesToMOPS_fd){
+		perror("MQueue Open ProcesToMOPS");
+		return 1;
+	}
+	rtprintf("Wysylam swoje queue handlery!\r\n");
+	xQueueSend(GlobalProcesMopsQueue, (void*)&proc_mops_queue.MOPSToProces_fd, 100);
+	xQueueSend(GlobalProcesMopsQueue, (void*)&proc_mops_queue.ProcesToMOPS_fd, 100);
+	return 0;
+}
+
+/**
+ * @brief Sends indicated buffer to connected MOPS broker (low level function).
+ *
+ * @param[in] buffer Contains data which will be sent to the connected broker.
+ * @param[in] buffLen Specifies number of bytes from buffer which will be sent.
+ * @return 0 if the item was successfully posted, otherwise -1.
+ */
+int sendToMOPS(char *buffer, uint16_t buffLen) {
+	while( xQueueSend(proc_mops_queue.ProcesToMOPS_fd, buffer, 0) != pdTRUE ){;}
+	rtprintf("Skonczylem wysylke na fd: %d. \r\n", proc_mops_queue.ProcesToMOPS_fd);
+	return 0;
+}
+
+/**
+ * @brief Receive data from MOPS broker (low level function).
+ *
+ * @param[out] buffer Container for data received from broker.
+ * @param[in] buffLen Define number of bytes which can be stored in buffer.
+ * @return MAX_QUEUE_SIZE if an item was successfully received from the queue, otherwise block.
+ */
+int recvFromMOPS(char *buffer, uint16_t buffLen) {
+	while ( xQueueReceive(proc_mops_queue.MOPSToProces_fd, buffer, 0) == pdFALSE )
+	{;}
+	return  MAX_QUEUE_SIZE;
+}
 #endif //TARGET_DEVICE == RTnode
 
 /**
@@ -155,8 +208,8 @@ int recvFromMOPS(int fd, uint8_t *buffer, uint16_t buffLen) {}
  * @param[in] Message Message payload (as a string).
  */
 void publishMOPS(char *Topic, char *Message) {
-	char buffer[MAX_QUEUE_SIZE];
-	memset(buffer, 0, MAX_QUEUE_SIZE);
+	char buffer[MAX_QUEUE_SIZE+1];
+	memset(buffer, 0, MAX_QUEUE_SIZE+1);
 	uint16_t packetID, written;
 	written = BuildClientPublishMessage((uint8_t*) buffer, sizeof(buffer),
 			(uint8_t*) Topic, (uint8_t*) Message, 0, 0, &packetID);
@@ -173,8 +226,8 @@ void publishMOPS(char *Topic, char *Message) {
  * @param[in] NoOfTopics Length of topics list.
  */
 void subscribeMOPS(char **TopicList, uint8_t *QosList, uint8_t NoOfTopics) {
-	char buffer[MAX_QUEUE_SIZE];
-	memset(buffer, 0, MAX_QUEUE_SIZE);
+	char buffer[MAX_QUEUE_SIZE+1];
+	memset(buffer, 0, MAX_QUEUE_SIZE+1);
 	uint16_t packetID, written;
 	written = BuildSubscribeMessage((uint8_t*) buffer, sizeof(buffer),
 			(uint8_t**) TopicList, QosList, NoOfTopics, &packetID);
@@ -192,9 +245,9 @@ void subscribeMOPS(char **TopicList, uint8_t *QosList, uint8_t NoOfTopics) {
  * @return Number of bytes actually written.
  */
 int readMOPS(char *buf, uint8_t length) {
-	char temp[MAX_QUEUE_SIZE];
+	char temp[MAX_QUEUE_SIZE+1];
 	int t;
-	memset(temp, 0, MAX_QUEUE_SIZE);
+	memset(temp, 0, MAX_QUEUE_SIZE+1);
 	memset(buf, 0, length);
 
 	if ((t = recvFromMOPS(temp, MAX_QUEUE_SIZE)) > 0) {
@@ -251,8 +304,9 @@ int InterpretFrame(char *messageBuf, char *frameBuf, uint8_t frameLen) {
  * @return 0 - in case of end of main thread. This situation should never happened.
  */
 int StartMOPSBroker(void) {
+#if TARGET_DEVICE == Linux
 	mlockall(MCL_CURRENT | MCL_FUTURE);
-
+#endif
 	mutex_init(&input_lock);
 	mutex_init(&output_lock);
 	mutex_init(&waiting_output_lock);
@@ -351,16 +405,23 @@ void threadRecvFromRTnet() {
  */
 void threadSendToRTnet() {
 	uint8_t are_local_topics = 0;
-	int err = 0, _fd;
+	int err = 0, _fd = 0;
 
+#if TARGET_DEVICE == Linux
 	// Open tdma device
+	//TODO
 	_fd = rt_dev_open("TDMA0", O_RDWR);
+#endif //TARGET_DEVICE == Linux
 	if (_fd < 0)
 		return;
 
 	for (;;) {
-		err = rt_dev_ioctl(_fd, RTMAC_RTIOC_WAITONCYCLE,
-				(void*) TDMA_WAIT_ON_SYNC);
+#if TARGET_DEVICE == Linux
+		err = rt_dev_ioctl(_fd, RTMAC_RTIOC_WAITONCYCLE, (void*) TDMA_WAIT_ON_SYNC);
+#endif //TARGET_DEVICE == Linux
+#if TARGET_DEVICE == RTnode
+	    xRTnetWaitSync(portMAX_DELAY);
+#endif //TARGET_DEVICE == RTnode
 		if (err)
 			printf("Failed to issue RTMAC_RTIOC_WAITONCYCLE, err=%d\n", err);
 		switch (MOPS_State) {
@@ -1027,7 +1088,60 @@ void DeleteProcessFromQueueList(int ClientID, MOPS_Queue *queue) {
 #if TARGET_DEVICE == RTnode
 void InitProcesConnection() {
 
-	for(;;) {}
+	QueueHandle_t new_mq_Proces_MOPS;
+	static QueueSetHandle_t master;
+	QueueSetMemberHandle_t xActivatedMember;
+
+	master = xQueueCreateSet( MAX_QUEUE_SIZE*MAX_QUEUE_MESSAGE );
+
+	GlobalProcesMopsQueue = xQueueCreate(MAX_QUEUE_SIZE, MAX_QUEUE_MESSAGE);
+	xQueueAddToSet( GlobalProcesMopsQueue, master );
+	rtprintf("gotowe. \r\n");
+	while(1) {
+		xActivatedMember = xQueueSelectFromSet( master, 10);
+		if (xActivatedMember != NULL) { // there are file descriptors to serve
+			if (xActivatedMember == GlobalProcesMopsQueue) {
+				rtprintf("Mam cos z globalne kolejki. \r\n");
+				new_mq_Proces_MOPS = ServeNewProcessConnection();
+				xQueueAddToSet( new_mq_Proces_MOPS, master );
+			} else {
+				ReceiveFromProcess(xActivatedMember);
+			}
+		}
+		if (xActivatedMember == NULL){ // timeout, we can do our things
+			//ServeSendingToProcesses();
+		}
+	}
+}
+
+int ReceiveFromProcess(int file_de) {
+	int ClientID;
+	uint8_t temp[MAX_QUEUE_SIZE + 1];
+
+	if (xQueueReceive(file_de, temp, 0) == pdTRUE ) {
+		rtprintf("Cos dostalem. \r\n");
+		ClientID = FindClientIDbyFileDesc(file_de);
+		AnalyzeProcessMessage(temp, MAX_QUEUE_SIZE, ClientID);
+	}
+	return 0;
+}
+
+int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de) {
+	if ( xQueueSend(file_de, buffer, 0) == pdTRUE  )
+		return MAX_QUEUE_SIZE;
+	return 0;
+}
+
+QueueHandle_t ServeNewProcessConnection(){
+	QueueHandle_t new_mq_Proces_MOPS, new_mq_MOPS_Proces;
+
+	if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_MOPS_Proces, (TickType_t)100))
+		if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_Proces_MOPS, (TickType_t)100))
+			if (AddToMOPSQueue(new_mq_MOPS_Proces, new_mq_Proces_MOPS) >= 0) {
+				rtprintf("Nowy deskryptor: %d\r\n", new_mq_Proces_MOPS);
+				return new_mq_Proces_MOPS;
+			}
+	return -1;
 }
 #endif //TARGET_DEVICE == RTnode
 

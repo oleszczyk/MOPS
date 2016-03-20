@@ -10,34 +10,40 @@
  *	@date	Jan 30, 2016
  *	@author	Michal Oleszczyk
  */
+#include "MOPS.h"
+#include "MOPS_RTnet_Con.h"
+
+#if TARGET_DEVICE == Linux
+#include <sys/un.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/mman.h>
+#endif //TARGET_DEVICE == Linux
+
+#if TARGET_DEVICE == RTnode
+#include "task.h"
+#endif //TARGET_DEVICE == RTnode
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/un.h>
 #include <stdint.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
 #include <pthread.h>
-#include "MOPS_RTnet_Con.h"
-#include "MOPS.h"
 #include <rtnet.h>
 #include <rtmac.h>
 #include <unistd.h>
-#include <sys/mman.h>
 #include <limits.h>
 
 
+#if TARGET_DEVICE == Linux
 static struct sockaddr_in rec_addr; /**< Struct containing socket address for receiving. */
 static struct sockaddr_in sd_addr_b;/**< Struct containing socket address for sending broadcast. */
 static struct sockaddr_in sd_addr_l;/**< Struct containing socket address for sending loop-back. */
-
 int get_sock; /**< Socket for receiving packet from RTnet. */
 int bcast_sock; /**< Socket for broadcasting packets to RTnet. */
 
-#if TARGET_DEVICE == Linux
 /**
  *	@brief	Setting all required variable for connection.
  *
@@ -60,15 +66,15 @@ void connectToRTnet(){
     memset(&sd_addr_l, 0, sizeof(sd_addr_l));
 
     rec_addr.sin_family = AF_INET;
-    rec_addr.sin_port = htons(PORT);
+    rec_addr.sin_port = htons(MOPS_PORT);
     rec_addr.sin_addr.s_addr =  htonl(INADDR_ANY);//inet_addr("10.0.0.0");
 
     sd_addr_b.sin_family = AF_INET;
-    sd_addr_b.sin_port = htons(PORT);
+    sd_addr_b.sin_port = htons(MOPS_PORT);
     sd_addr_b.sin_addr.s_addr =  inet_addr(IPADDR);
 
     sd_addr_l.sin_family = AF_INET;
-    sd_addr_l.sin_port = htons(PORT);
+    sd_addr_l.sin_port = htons(MOPS_PORT);
     sd_addr_l.sin_addr.s_addr =  inet_addr(IPADDR_LO);
 
 	if (bind(get_sock, (struct sockaddr*)&rec_addr, sizeof(rec_addr))==-1)
@@ -164,20 +170,65 @@ void unlock_mutex(pthread_mutex_t *lock){
 
 
 #if TARGET_DEVICE == RTnode
+static xRTnetSockAddr_t rec_addr; /**< Struct containing socket address for receiving. */
+static xRTnetSockAddr_t sd_addr_b;/**< Struct containing socket address for sending broadcast. */
+static xRTnetSockAddr_t sd_addr_l;/**< Struct containing socket address for sending loop-back. */
+xRTnetSocket_t get_sock; /**< Socket for receiving packet from RTnet. */
+xRTnetSocket_t bcast_sock; /**< Socket for broadcasting packets to RTnet. */
+
 void startNewThread(void *(*start_routine) (void *), void *arg){
-
+	TaskHandle_t xHandle = NULL;
+	xTaskCreate( (*start_routine), NULL, 400, arg, 3, &xHandle );
 }
 
-int connectToRTnet(){
-	int bcast_sock = 1;
-    return bcast_sock;
+void connectToRTnet(){
+    uint8_t  macBroadcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    uint32_t ip;
+
+	while(xRTnetWaitRedy(portMAX_DELAY) == pdFAIL){;}
+
+	 /* network byte order ip */
+    ip  = ulRTnetGetIpAddr();
+    /* Add broadcast address */
+    ip |= rtnet_htonl(RTNET_NETMASK_BROADCAST);
+    xRTnetRouteAdd(macBroadcast, ip);
+
+
+    if ((bcast_sock = xRTnetSocket(RTNET_AF_INET, RTNET_SOCK_DGRAM, RTNET_IPPROTO_UDP)) == NULL)
+        vTaskSuspend(NULL);
+    if ((get_sock = xRTnetSocket(RTNET_AF_INET, RTNET_SOCK_DGRAM, RTNET_IPPROTO_UDP)) == NULL)
+        vTaskSuspend(NULL);
+
+    rec_addr.sin_port = rtnet_htons(MOPS_PORT);
+    rec_addr.sin_addr =  rtnet_htonl(0x00000000UL);//inet_addr("10.0.0.0");
+
+    sd_addr_b.sin_port = rtnet_htons(MOPS_PORT);
+    sd_addr_b.sin_addr =  ip;
+
+    sd_addr_l.sin_port = rtnet_htons(MOPS_PORT);
+    sd_addr_l.sin_addr = rtnet_htons(IPADDR_LO);
+
+	if (xRTnetBind(get_sock, &rec_addr, sizeof(rec_addr)) != 0)
+		vTaskSuspend(NULL);
+	rtprintf("Podlaczony, niby\r\n");
 }
 
-void sendToRTnet(int socket, uint8_t *buf, int buflen){
-	return;
+void sendToRTnet(uint8_t *buf, int buflen){
+	int write = 0;
+	uint32_t len =  sizeof(sd_addr_b);
+    if( (write = lRTnetSendto(bcast_sock, buf, buflen, RTNET_ZERO_COPY, &sd_addr_b, len)) <= 0 )
+        perror("sendto");
+    if( (write = lRTnetSendto(bcast_sock, buf, buflen, RTNET_ZERO_COPY, &sd_addr_l, len)) <= 0 )
+        perror("sendto");
+	rtprintf("Wyslane, niby\r\n");
 }
-int receiveFromRTnet(int socket, uint8_t *buf, int buflen){
-	return 0;
+int receiveFromRTnet(uint8_t *buf, int buflen){
+	int written = 0;
+	uint32_t len = sizeof(rec_addr);
+
+	written = lRTnetRecvfrom(get_sock, buf, (size_t) buflen, RTNET_ZERO_COPY, &rec_addr,  &len);
+	rtprintf("Odebrane, niby\r\n");
+	return written;
 }
 
 uint8_t mutex_init(SemaphoreHandle_t *lock){
@@ -188,14 +239,13 @@ uint8_t mutex_init(SemaphoreHandle_t *lock){
 }
 
 void lock_mutex(SemaphoreHandle_t *lock){
-	while( xSemaphoreTake( *lock, ( TickType_t ) 100.0f/TICK_PERIOD_MS ) != pdTRUE )
-	{};
+	while( xSemaphoreTake( *lock, ( TickType_t ) 0 ) != pdTRUE )
+	{;}
 }
 void unlock_mutex(SemaphoreHandle_t *lock){
 	xSemaphoreGive( *lock );
 }
 #endif //TARGET == RTNODE
-
 
 
 //***************** MOPS - MOPS communication protocol ********************
