@@ -23,14 +23,14 @@
 /** Maximal number of connected local processes to broker. */
 #define MAX_PROCES_CONNECTION 10
 /** Maximal length of message broker<->process. */
-#define MAX_QUEUE_SIZE 100
+#define MAX_QUEUE_MESSAGE_SIZE 100
 /** Maximal amount of messages stored in queues broker<->process. */
-#define MAX_QUEUE_MESSAGE 10
+#define MAX_QUEUE_MESSAGE_NUMBER 10
 //***************** General Settings *********************
 
 //***************MOPS - RTnet Settings********************
 /** MOPS protocol port. */
-#define MOPS_PORT 1883
+#define MOPS_PORT 1525
 /** Size of send/receive buffers. */
 #define UDP_MAX_SIZE 512
 

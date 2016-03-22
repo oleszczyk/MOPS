@@ -47,7 +47,12 @@ static MOPS_Queue proc_mops_queue;
 // *************** Global variables for MOPS broker *************** //
 static uint8_t MOPS_State = SEND_REQUEST;
 uint8_t input_buffer[UDP_MAX_SIZE];				/**< Buffer for receiving data from RTnet. */
+#if TARGET_DEVICE == RTnode
+uint8_t *output_buffer;				 		 	/**< Buffer for sending data to RTnet. */
+#endif //TARGET_DEVICE == RTnode
+#if TARGET_DEVICE == Linux
 uint8_t output_buffer[UDP_MAX_SIZE]; 		 	/**< Buffer for sending data to RTnet. */
+#endif //TARGET_DEVICE == Linux
 uint8_t waiting_output_buffer[UDP_MAX_SIZE]; 	/**< Buffer for incoming data from processes
 											 	* (waiting for sending them to RTnet). */
 uint8_t waiting_input_buffer[UDP_MAX_SIZE];  	/**< Buffer for outgoing data to processes
@@ -93,8 +98,8 @@ int connectToMOPS(void) {
 	struct mq_attr attr;
 	char buffer[10] = { '/', 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	attr.mq_flags = 0;
-	attr.mq_maxmsg = MAX_QUEUE_MESSAGE;
-	attr.mq_msgsize = MAX_QUEUE_SIZE;
+	attr.mq_maxmsg = MAX_QUEUE_MESSAGE_NUMBER;
+	attr.mq_msgsize = MAX_QUEUE_MESSAGE_SIZE;
 	attr.mq_curmsgs = 0;
 	sprintf(buffer + 1, "%d", getpid());
 
@@ -157,13 +162,14 @@ int recvFromMOPS(char *buffer, uint16_t buffLen) {
 int connectToMOPS() {
 
 	while(xRTnetWaitRedy(portMAX_DELAY) == pdFAIL){;}
-	proc_mops_queue.MOPSToProces_fd = xQueueCreate(MAX_QUEUE_SIZE, MAX_QUEUE_MESSAGE);
+	vTaskDelay(15000);
+	proc_mops_queue.MOPSToProces_fd = xQueueCreate(MAX_QUEUE_MESSAGE_NUMBER, MAX_QUEUE_MESSAGE_SIZE);
 	if (0 == proc_mops_queue.MOPSToProces_fd){
 		perror("MQueue Open MOPSToProces");
 		return 1;
 	}
 
-	proc_mops_queue.ProcesToMOPS_fd = xQueueCreate(MAX_QUEUE_SIZE, MAX_QUEUE_MESSAGE);
+	proc_mops_queue.ProcesToMOPS_fd = xQueueCreate(MAX_QUEUE_MESSAGE_NUMBER, MAX_QUEUE_MESSAGE_SIZE);
 	if (0 == proc_mops_queue.ProcesToMOPS_fd){
 		perror("MQueue Open ProcesToMOPS");
 		return 1;
@@ -171,6 +177,7 @@ int connectToMOPS() {
 	rtprintf("Wysylam swoje queue handlery!\r\n");
 	xQueueSend(GlobalProcesMopsQueue, (void*)&proc_mops_queue.MOPSToProces_fd, 100);
 	xQueueSend(GlobalProcesMopsQueue, (void*)&proc_mops_queue.ProcesToMOPS_fd, 100);
+	vTaskDelay(15000);
 	return 0;
 }
 
@@ -183,7 +190,6 @@ int connectToMOPS() {
  */
 int sendToMOPS(char *buffer, uint16_t buffLen) {
 	while( xQueueSend(proc_mops_queue.ProcesToMOPS_fd, buffer, 0) != pdTRUE ){;}
-	rtprintf("Skonczylem wysylke na fd: %d. \r\n", proc_mops_queue.ProcesToMOPS_fd);
 	return 0;
 }
 
@@ -192,12 +198,12 @@ int sendToMOPS(char *buffer, uint16_t buffLen) {
  *
  * @param[out] buffer Container for data received from broker.
  * @param[in] buffLen Define number of bytes which can be stored in buffer.
- * @return MAX_QUEUE_SIZE if an item was successfully received from the queue, otherwise block.
+ * @return MAX_QUEUE_MESSAGE_SIZE if an item was successfully received from the queue, otherwise block.
  */
 int recvFromMOPS(char *buffer, uint16_t buffLen) {
 	while ( xQueueReceive(proc_mops_queue.MOPSToProces_fd, buffer, 0) == pdFALSE )
 	{;}
-	return  MAX_QUEUE_SIZE;
+	return  MAX_QUEUE_MESSAGE_SIZE;
 }
 #endif //TARGET_DEVICE == RTnode
 
@@ -208,8 +214,8 @@ int recvFromMOPS(char *buffer, uint16_t buffLen) {
  * @param[in] Message Message payload (as a string).
  */
 void publishMOPS(char *Topic, char *Message) {
-	char buffer[MAX_QUEUE_SIZE+1];
-	memset(buffer, 0, MAX_QUEUE_SIZE+1);
+	char buffer[MAX_QUEUE_MESSAGE_SIZE+1];
+	memset(buffer, 0, MAX_QUEUE_MESSAGE_SIZE+1);
 	uint16_t packetID, written;
 	written = BuildClientPublishMessage((uint8_t*) buffer, sizeof(buffer),
 			(uint8_t*) Topic, (uint8_t*) Message, 0, 0, &packetID);
@@ -226,8 +232,8 @@ void publishMOPS(char *Topic, char *Message) {
  * @param[in] NoOfTopics Length of topics list.
  */
 void subscribeMOPS(char **TopicList, uint8_t *QosList, uint8_t NoOfTopics) {
-	char buffer[MAX_QUEUE_SIZE+1];
-	memset(buffer, 0, MAX_QUEUE_SIZE+1);
+	char buffer[MAX_QUEUE_MESSAGE_SIZE+1];
+	memset(buffer, 0, MAX_QUEUE_MESSAGE_SIZE+1);
 	uint16_t packetID, written;
 	written = BuildSubscribeMessage((uint8_t*) buffer, sizeof(buffer),
 			(uint8_t**) TopicList, QosList, NoOfTopics, &packetID);
@@ -245,12 +251,12 @@ void subscribeMOPS(char **TopicList, uint8_t *QosList, uint8_t NoOfTopics) {
  * @return Number of bytes actually written.
  */
 int readMOPS(char *buf, uint8_t length) {
-	char temp[MAX_QUEUE_SIZE+1];
+	char temp[MAX_QUEUE_MESSAGE_SIZE+1];
 	int t;
-	memset(temp, 0, MAX_QUEUE_SIZE+1);
+	memset(temp, 0, MAX_QUEUE_MESSAGE_SIZE+1);
 	memset(buf, 0, length);
 
-	if ((t = recvFromMOPS(temp, MAX_QUEUE_SIZE)) > 0) {
+	if ((t = recvFromMOPS(temp, MAX_QUEUE_MESSAGE_SIZE)) > 0) {
 		return InterpretFrame(buf, temp, t);
 	} else {
 		if (t < 0)
@@ -412,6 +418,9 @@ void threadSendToRTnet() {
 	uint8_t are_local_topics = 0;
 	int err = 0, _fd = 0;
 
+#if TARGET_DEVICE == RTnode
+	output_buffer = pvRTnetGetUdpDataBuffer(UDP_MAX_SIZE);
+#endif //TARGET_DEVICE == RTnode
 #if TARGET_DEVICE == Linux
 	// Open tdma device
 	//TODO
@@ -949,8 +958,8 @@ void InitProcesConnection() {
 
 	/* initialize the queue attributes */
 	attr.mq_flags = 0;
-	attr.mq_maxmsg = MAX_QUEUE_MESSAGE;
-	attr.mq_msgsize = MAX_QUEUE_SIZE;
+	attr.mq_maxmsg = MAX_QUEUE_MESSAGE_NUMBER;
+	attr.mq_msgsize = MAX_QUEUE_MESSAGE_SIZE;
 	attr.mq_curmsgs = 0;
 
 	mq_listener = mq_open(QUEUE_NAME, O_CREAT | O_RDONLY, 0644, &attr);
@@ -996,9 +1005,9 @@ void InitProcesConnection() {
  */
 int ReceiveFromProcess(int file_de) {
 	int bytes_read, ClientID;
-	uint8_t temp[MAX_QUEUE_SIZE + 1];
+	uint8_t temp[MAX_QUEUE_MESSAGE_SIZE + 1];
 
-	bytes_read = mq_receive(file_de, (char*) temp, MAX_QUEUE_SIZE, NULL);
+	bytes_read = mq_receive(file_de, (char*) temp, MAX_QUEUE_MESSAGE_SIZE, NULL);
 	if (bytes_read == -1) {
 		CloseProcessConnection(file_de);
 	}
@@ -1024,12 +1033,12 @@ int ReceiveFromProcess(int file_de) {
 int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de) {
 	struct mq_attr attr;
 	attr.mq_flags = 0;
-	attr.mq_maxmsg = MAX_QUEUE_MESSAGE;
-	attr.mq_msgsize = MAX_QUEUE_SIZE;
+	attr.mq_maxmsg = MAX_QUEUE_MESSAGE_NUMBER;
+	attr.mq_msgsize = MAX_QUEUE_MESSAGE_SIZE;
 	attr.mq_curmsgs = 0;
 
 	mq_getattr(file_de, &attr);
-	if (attr.mq_curmsgs < MAX_QUEUE_MESSAGE)
+	if (attr.mq_curmsgs < MAX_QUEUE_MESSAGE_NUMBER)
 		return mq_send(file_de, (char*) buffer, buffLen, 0);
 	return 0;
 }
@@ -1047,11 +1056,11 @@ int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de) {
  * 	-1 - if there is no place in MOPSQueue array or no message received from listener_fd
  */
 int ServeNewProcessConnection(fd_set *set, int listener_fd) {
-	uint8_t buffer[MAX_QUEUE_SIZE + 1], temp;
+	uint8_t buffer[MAX_QUEUE_MESSAGE_SIZE + 1], temp;
 	int new_mq_Proces_MOPS, new_mq_MOPS_Proces;
 
-	memset(buffer, 0, MAX_QUEUE_SIZE + 1);
-	if (mq_receive(listener_fd, (char*) buffer, MAX_QUEUE_SIZE, NULL) > 0) {
+	memset(buffer, 0, MAX_QUEUE_MESSAGE_SIZE + 1);
+	if (mq_receive(listener_fd, (char*) buffer, MAX_QUEUE_MESSAGE_SIZE, NULL) > 0) {
 		temp = strlen((char*) buffer);
 		buffer[temp] = 'b';
 		new_mq_Proces_MOPS = mq_open((char*) buffer, O_RDONLY);
@@ -1102,9 +1111,9 @@ void InitProcesConnection() {
 	static QueueSetHandle_t master;
 	QueueSetMemberHandle_t xActivatedMember;
 
-	master = xQueueCreateSet( MAX_QUEUE_SIZE*MAX_QUEUE_MESSAGE );
+	master = xQueueCreateSet( MAX_QUEUE_MESSAGE_SIZE*MAX_QUEUE_MESSAGE_NUMBER );
 
-	GlobalProcesMopsQueue = xQueueCreate(MAX_QUEUE_SIZE, MAX_QUEUE_MESSAGE);
+	GlobalProcesMopsQueue = xQueueCreate(MAX_QUEUE_MESSAGE_NUMBER, MAX_QUEUE_MESSAGE_SIZE);
 	xQueueAddToSet( GlobalProcesMopsQueue, master );
 	rtprintf("gotowe. \r\n");
 	while(1) {
@@ -1126,19 +1135,19 @@ void InitProcesConnection() {
 
 int ReceiveFromProcess(int file_de) {
 	int ClientID;
-	uint8_t temp[MAX_QUEUE_SIZE + 1];
+	uint8_t temp[MAX_QUEUE_MESSAGE_SIZE + 1];
 
 	if (xQueueReceive(file_de, temp, 0) == pdTRUE ) {
 		rtprintf("Cos dostalem. \r\n");
 		ClientID = FindClientIDbyFileDesc(file_de);
-		AnalyzeProcessMessage(temp, MAX_QUEUE_SIZE, ClientID);
+		AnalyzeProcessMessage(temp, MAX_QUEUE_MESSAGE_SIZE, ClientID);
 	}
 	return 0;
 }
 
 int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de) {
 	if ( xQueueSend(file_de, buffer, 0) == pdTRUE  )
-		return MAX_QUEUE_SIZE;
+		return MAX_QUEUE_MESSAGE_SIZE;
 	return 0;
 }
 
@@ -1228,12 +1237,12 @@ int ServeSendingToProcesses() {
  */
 void PrepareFrameToSendToProcess(uint8_t *Buffer, int written_bytes) {
 	uint16_t topicID, topicLen, index = 0;
-	uint8_t tempBuffer[MAX_QUEUE_SIZE], HeaderLen;
+	uint8_t tempBuffer[MAX_QUEUE_MESSAGE_SIZE], HeaderLen;
 	uint8_t tempTopic[MAX_TOPIC_LENGTH + 1], tempMSB = 0, tempLSB = 0;
 	FixedHeader FHeader;
 	int clientID[MAX_PROCES_CONNECTION], i;
 
-	memset(tempBuffer, 0, MAX_QUEUE_SIZE);
+	memset(tempBuffer, 0, MAX_QUEUE_MESSAGE_SIZE);
 	memcpy(tempBuffer, Buffer, written_bytes);
 	HeaderLen = sizeof(FHeader);
 
@@ -1469,10 +1478,10 @@ void AddPacketToWaitingTab(uint8_t *buffer, int FrameLen) {
  * mutex #output_lock is blocked.
  */
 void AddPacketToFinalTab(uint8_t *buffer, int FrameLen, uint16_t topicID) {
-	uint8_t tempBuff[MAX_QUEUE_SIZE];
+	uint8_t tempBuff[MAX_QUEUE_MESSAGE_SIZE];
 	uint8_t MSBtemp, LSBtemp, headLen, index = 0;
 	uint16_t TopicLen, MessageLen;
-	memset(tempBuff, 0, MAX_QUEUE_SIZE);
+	memset(tempBuff, 0, MAX_QUEUE_MESSAGE_SIZE);
 
 	headLen = sizeof(FixedHeader);
 	u16ToMSBandLSB(topicID, &MSBtemp, &LSBtemp);
