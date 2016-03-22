@@ -40,7 +40,6 @@
 #if TARGET_DEVICE == Linux
 static struct sockaddr_in rec_addr; /**< Struct containing socket address for receiving. */
 static struct sockaddr_in sd_addr_b;/**< Struct containing socket address for sending broadcast. */
-static struct sockaddr_in sd_addr_l;/**< Struct containing socket address for sending loop-back. */
 int get_sock; /**< Socket for receiving packet from RTnet. */
 int bcast_sock; /**< Socket for broadcasting packets to RTnet. */
 
@@ -63,7 +62,6 @@ void connectToRTnet(){
 
     memset(&rec_addr, 0, sizeof(rec_addr));
     memset(&sd_addr_b, 0, sizeof(sd_addr_b));
-    memset(&sd_addr_l, 0, sizeof(sd_addr_l));
 
     rec_addr.sin_family = AF_INET;
     rec_addr.sin_port = htons(MOPS_PORT);
@@ -72,10 +70,6 @@ void connectToRTnet(){
     sd_addr_b.sin_family = AF_INET;
     sd_addr_b.sin_port = htons(MOPS_PORT);
     sd_addr_b.sin_addr.s_addr =  inet_addr(IPADDR);
-
-    sd_addr_l.sin_family = AF_INET;
-    sd_addr_l.sin_port = htons(MOPS_PORT);
-    sd_addr_l.sin_addr.s_addr =  inet_addr(IPADDR_LO);
 
 	if (bind(get_sock, (struct sockaddr*)&rec_addr, sizeof(rec_addr))==-1)
 		perror("bind");
@@ -93,8 +87,6 @@ void sendToRTnet(uint8_t *buf, int buflen){
 	int write = 0;
 	socklen_t len = sizeof(sd_addr_b);
     if((write = sendto(bcast_sock, buf, buflen, 0, (struct sockaddr*)&sd_addr_b, len)) < 0)
-        perror("sendto");
-    if((write = sendto(bcast_sock, buf, buflen, 0, (struct sockaddr*)&sd_addr_l, len)) < 0)
         perror("sendto");
 }
 

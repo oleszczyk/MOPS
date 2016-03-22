@@ -36,8 +36,6 @@
 
 /** Broadcast address. */
 #define IPADDR     "10.255.255.255"
-/** Loop-back address. */
-#define IPADDR_LO  "127.0.0.1"
 /** Maximal length of MOPS topic name (max is 2^16-1).*/
 #define MAX_TOPIC_LENGTH             10
 /** Maximal length of MOPS message (max is 2^16-1).*/

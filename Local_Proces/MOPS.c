@@ -387,11 +387,16 @@ void DeleteProcessFromSubList(int ClientID, SubscriberList *sublist) {
  * is locked. That means #input_lock has to be unlock to start receiving.
  */
 void threadRecvFromRTnet() {
+	uint8_t temp[UDP_MAX_SIZE];
+	uint16_t index_temp = 0;
 	for (;;) {
+		index_temp = receiveFromRTnet(temp, UDP_MAX_SIZE);
 		lock_mutex(&input_lock);
-		input_index = receiveFromRTnet(input_buffer, UDP_MAX_SIZE);
+		memcpy(input_buffer, temp, index_temp);
+		input_index = index_temp;
 		AnalyzeIncomingUDP(input_buffer, input_index);
 		memset(input_buffer, 0, UDP_MAX_SIZE);
+		input_index = 0;
 		unlock_mutex(&input_lock);
 	}
 }
@@ -443,16 +448,21 @@ void threadSendToRTnet() {
 			SendTopicList(list);
 			break;
 		}
-
 		lock_mutex(&output_lock);
-		if ((output_index > sizeof(MOPSHeader))
-				|| (output_buffer[0] == TOPIC_REQUEST)) {
+		if ((output_index > sizeof(MOPSHeader))	|| (output_buffer[0] == TOPIC_REQUEST)) {
+			lock_mutex(&input_lock);
+			memcpy(input_buffer, output_buffer, output_index);
+			input_index = output_index;
+			AnalyzeIncomingUDP(input_buffer, input_index);
+			memset(input_buffer, 0, UDP_MAX_SIZE);
+			input_index = 0;
+			unlock_mutex(&input_lock);
+
 			sendToRTnet(output_buffer, output_index);
-			MOPS_State = SEND_NOTHING;
 		}
+		MOPS_State = SEND_NOTHING;
 		memset(output_buffer, 0, UDP_MAX_SIZE);
 		output_index = 0;
-
 		unlock_mutex(&output_lock);
 	}
 }
@@ -831,14 +841,14 @@ void AnalyzeIncomingUDP(uint8_t *Buffer, int written_bytes) {
 
 	switch (MHeader.MOPSMessageType) {
 	case TOPIC_REQUEST:
-		lock_mutex(&output_lock);
+		//lock_mutex(&output_lock);
 		MOPS_State = SEND_TOPIC_LIST;
-		unlock_mutex(&output_lock);
+		//unlock_mutex(&output_lock);
 		break;
 	case NEW_TOPICS:
-		lock_mutex(&output_lock);
+		//lock_mutex(&output_lock);
 		UpdateTopicList(Buffer, written_bytes);
-		unlock_mutex(&output_lock);
+		//unlock_mutex(&output_lock);
 		break;
 	case NOTHING:
 		//do not change state

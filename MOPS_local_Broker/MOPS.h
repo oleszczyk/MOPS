@@ -30,14 +30,12 @@
 
 //***************MOPS - RTnet Settings********************
 /** MOPS protocol port. */
-#define MOPS_PORT 1883
+#define MOPS_PORT 1525
 /** Size of send/receive buffers. */
 #define UDP_MAX_SIZE 512
 
 /** Broadcast address. */
 #define IPADDR     "10.255.255.255"
-/** Loop-back address. */
-#define IPADDR_LO  "127.0.0.1"
 /** Maximal length of MOPS topic name (max is 2^16-1).*/
 #define MAX_TOPIC_LENGTH             10
 /** Maximal length of MOPS message (max is 2^16-1).*/
