@@ -164,7 +164,6 @@ void unlock_mutex(pthread_mutex_t *lock){
 #if TARGET_DEVICE == RTnode
 static xRTnetSockAddr_t rec_addr; /**< Struct containing socket address for receiving. */
 static xRTnetSockAddr_t sd_addr_b;/**< Struct containing socket address for sending broadcast. */
-static xRTnetSockAddr_t sd_addr_l;/**< Struct containing socket address for sending loop-back. */
 xRTnetSocket_t get_sock; /**< Socket for receiving packet from RTnet. */
 xRTnetSocket_t bcast_sock; /**< Socket for broadcasting packets to RTnet. */
 
@@ -176,6 +175,7 @@ void startNewThread(void *(*start_routine) (void *), void *arg){
 void connectToRTnet(){
     uint8_t  macBroadcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     uint32_t ip;
+    xRTnetSockAddr_t  bindAddr;
 
 	while(xRTnetWaitRedy(portMAX_DELAY) == pdFAIL){;}
 
@@ -185,7 +185,6 @@ void connectToRTnet(){
     ip |= rtnet_htonl(RTNET_NETMASK_BROADCAST);
     xRTnetRouteAdd(macBroadcast, ip);
 
-
     if ((bcast_sock = xRTnetSocket(RTNET_AF_INET, RTNET_SOCK_DGRAM, RTNET_IPPROTO_UDP)) == NULL)
         vTaskSuspend(NULL);
     if ((get_sock = xRTnetSocket(RTNET_AF_INET, RTNET_SOCK_DGRAM, RTNET_IPPROTO_UDP)) == NULL)
@@ -194,11 +193,13 @@ void connectToRTnet(){
     rec_addr.sin_port = rtnet_htons(MOPS_PORT);
     rec_addr.sin_addr =  rtnet_htonl(0x00000000UL);//inet_addr("10.0.0.0");
 
-    sd_addr_b.sin_port = rtnet_htons(MOPS_PORT);
-    sd_addr_b.sin_addr =  ip;
 
-    sd_addr_l.sin_port = rtnet_htons(MOPS_PORT);
-    sd_addr_l.sin_addr = rtnet_htons(IPADDR_LO);
+    sd_addr_b.sin_port = rtnet_htons(MOPS_PORT);
+    sd_addr_b.sin_addr = ip;
+
+    bindAddr.sin_port = rtnet_htons(2001);
+    if(xRTnetBind(bcast_sock, &bindAddr, sizeof(&bindAddr)) != 0)
+		vTaskSuspend(NULL);
 
 	if (xRTnetBind(get_sock, &rec_addr, sizeof(rec_addr)) != 0)
 		vTaskSuspend(NULL);
@@ -207,18 +208,20 @@ void connectToRTnet(){
 
 void sendToRTnet(uint8_t *buf, int buflen){
 	int write = 0;
-	uint32_t len =  sizeof(sd_addr_b);
-    if( (write = lRTnetSendto(bcast_sock, buf, buflen, RTNET_ZERO_COPY, &sd_addr_b, len)) <= 0 )
-        perror("sendto");
-    if( (write = lRTnetSendto(bcast_sock, buf, buflen, RTNET_ZERO_COPY, &sd_addr_l, len)) <= 0 )
-        perror("sendto");
-	rtprintf("Wyslane, niby\r\n");
+	uint32_t len1 = sizeof(sd_addr_b);
+
+    if( (write = lRTnetSendto(bcast_sock, buf, buflen, 0, &sd_addr_b, len1)) <= 0 )
+        rtprintf("error: sendto");
 }
+
 int receiveFromRTnet(uint8_t *buf, int buflen){
 	int written = 0;
 	uint32_t len = sizeof(rec_addr);
+	uint8_t          *data;
 
-	written = lRTnetRecvfrom(get_sock, buf, (size_t) buflen, RTNET_ZERO_COPY, &rec_addr,  &len);
+	written = lRTnetRecvfrom(get_sock, &data, (size_t) buflen, RTNET_ZERO_COPY, &rec_addr,  &len);
+	memcpy(buf, data, written);
+	vRTnetReleaseUdpDataBuffer(data);
 	rtprintf("Odebrane, niby\r\n");
 	return written;
 }
