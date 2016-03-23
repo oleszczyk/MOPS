@@ -222,7 +222,7 @@ int receiveFromRTnet(uint8_t *buf, int buflen){
 	written = lRTnetRecvfrom(get_sock, &data, (size_t) buflen, RTNET_ZERO_COPY, &rec_addr,  &len);
 	memcpy(buf, data, written);
 	vRTnetReleaseUdpDataBuffer(data);
-	//rtprintf("Odebrane, niby\r\n");
+	rtprintf("Odebrane, niby\r\n");
 	return written;
 }
 

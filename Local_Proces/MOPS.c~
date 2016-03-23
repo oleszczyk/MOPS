@@ -174,7 +174,7 @@ int connectToMOPS() {
 		perror("MQueue Open ProcesToMOPS");
 		return 1;
 	}
-	//rtprintf("Wysylam swoje queue handlery!\r\n");
+	rtprintf("Wysylam swoje queue handlery!\r\n");
 	xQueueSend(GlobalProcesMopsQueue, (void*)&proc_mops_queue.MOPSToProces_fd, 100);
 	xQueueSend(GlobalProcesMopsQueue, (void*)&proc_mops_queue.ProcesToMOPS_fd, 100);
 	vTaskDelay(15000);
@@ -1115,12 +1115,12 @@ void InitProcesConnection() {
 
 	GlobalProcesMopsQueue = xQueueCreate(MAX_QUEUE_MESSAGE_NUMBER, MAX_QUEUE_MESSAGE_SIZE);
 	xQueueAddToSet( GlobalProcesMopsQueue, master );
-	//rtprintf("gotowe. \r\n");
+	rtprintf("gotowe. \r\n");
 	while(1) {
 		xActivatedMember = xQueueSelectFromSet( master, 10);
 		if (xActivatedMember != NULL) { // there are file descriptors to serve
 			if (xActivatedMember == GlobalProcesMopsQueue) {
-				//rtprintf("Mam cos z globalne kolejki. \r\n");
+				rtprintf("Mam cos z globalne kolejki. \r\n");
 				new_mq_Proces_MOPS = ServeNewProcessConnection();
 				xQueueAddToSet( new_mq_Proces_MOPS, master );
 			} else {
@@ -1128,7 +1128,7 @@ void InitProcesConnection() {
 			}
 		}
 		if (xActivatedMember == NULL){ // timeout, we can do our things
-			ServeSendingToProcesses();
+			//ServeSendingToProcesses();
 		}
 	}
 }
@@ -1138,7 +1138,7 @@ int ReceiveFromProcess(int file_de) {
 	uint8_t temp[MAX_QUEUE_MESSAGE_SIZE + 1];
 
 	if (xQueueReceive(file_de, temp, 0) == pdTRUE ) {
-		//rtprintf("Cos dostalem. \r\n");
+		rtprintf("Cos dostalem. \r\n");
 		ClientID = FindClientIDbyFileDesc(file_de);
 		AnalyzeProcessMessage(temp, MAX_QUEUE_MESSAGE_SIZE, ClientID);
 	}
@@ -1157,7 +1157,7 @@ QueueHandle_t ServeNewProcessConnection(){
 	if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_MOPS_Proces, (TickType_t)100))
 		if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_Proces_MOPS, (TickType_t)100))
 			if (AddToMOPSQueue(new_mq_MOPS_Proces, new_mq_Proces_MOPS) >= 0) {
-				//rtprintf("Nowy deskryptor: %d\r\n", new_mq_Proces_MOPS);
+				rtprintf("Nowy deskryptor: %d\r\n", new_mq_Proces_MOPS);
 				return new_mq_Proces_MOPS;
 			}
 	return -1;

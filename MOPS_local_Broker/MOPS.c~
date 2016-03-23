@@ -1157,7 +1157,7 @@ QueueHandle_t ServeNewProcessConnection(){
 	if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_MOPS_Proces, (TickType_t)100))
 		if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_Proces_MOPS, (TickType_t)100))
 			if (AddToMOPSQueue(new_mq_MOPS_Proces, new_mq_Proces_MOPS) >= 0) {
-				//rtprintf("Nowy deskryptor: %d\r\n", new_mq_Proces_MOPS);
+				rtprintf("Nowy deskryptor: %d\r\n", new_mq_Proces_MOPS);
 				return new_mq_Proces_MOPS;
 			}
 	return -1;
