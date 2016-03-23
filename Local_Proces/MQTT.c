@@ -262,7 +262,9 @@ uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topi
 
 
 	if (QOS > 0)//Full fill packet identifiers
+#if TARGET_DEVICE == Linux
 		srand ( time(NULL) );
+#endif //TARGET_DEVICE == Linux
 		*packetID = (uint16_t) (rand() % 65535);
 
 	u16ToMSBandLSB(*packetID, &MSB_temp, &LSB_temp);
@@ -363,7 +365,9 @@ uint16_t BuildSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic, 
 
 	Init_FixedHeader(&FHeader, SUBSCRIBE, 0);
 
+#if TARGET_DEVICE == Linux
 	srand ( time(NULL) );
+#endif //TARGET_DEVICE == Linux
 	*packetID = (uint16_t) (rand() % 65535);
 
 	//Check if all data can be stored in Message buffer
@@ -472,7 +476,9 @@ uint16_t BuildUnSubscribeMessage(uint8_t *Buffer, int BufferLen, uint8_t **Topic
 
 	Init_FixedHeader(&FHeader, UNSUBSCRIBE, 0);
 
+#if TARGET_DEVICE == Linux
 	srand ( time(NULL) );
+#endif //TARGET_DEVICE == Linux
 	*packetID = (uint16_t) (rand() % 65535);
 
 	//Check if all data can be stored in Message buffer

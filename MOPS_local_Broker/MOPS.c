@@ -290,7 +290,7 @@ int InterpretFrame(char *messageBuf, char *frameBuf, uint8_t frameLen) {
 		index += 2;
 	messsageLen = MSBandLSBTou16(frameBuf[index], frameBuf[index + 1]);
 	index += 2;
-	if ((index + messsageLen) == frameLen) {
+	if ((index + messsageLen) <= frameLen) {
 		memcpy(messageBuf, frameBuf + index, messsageLen);
 		return messsageLen;
 	}
