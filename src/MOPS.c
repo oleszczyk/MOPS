@@ -18,6 +18,7 @@
 #include <sys/un.h>
 #include <mqueue.h>
 #include <sys/mman.h>
+#include <time.h>
 #endif //TARGET_DEVICE == Linux
 
 #if TARGET_DEVICE == RTnode
@@ -101,7 +102,7 @@ int connectToMOPS(void) {
 	attr.mq_maxmsg = MAX_QUEUE_MESSAGE_NUMBER;
 	attr.mq_msgsize = MAX_QUEUE_MESSAGE_SIZE;
 	attr.mq_curmsgs = 0;
-	sprintf(buffer + 1, "%d", getpid());
+	sprintf(buffer + 1, "%d", rand()%100000);
 
 	mq = mq_open(QUEUE_NAME, O_WRONLY);
 	if (!((mqd_t) -1 != mq)){
@@ -325,6 +326,36 @@ int StartMOPSBroker(void) {
 	startNewThread((void*) &threadSendToRTnet, NULL);
 	startNewThread((void*) &threadRecvFromRTnet, NULL);
 	InitProcesConnection();
+
+	return 0;
+}
+
+/**
+ * @brief Function which starts MOPS broker functionalities (user interface function) for Orocos need.
+ *
+ * If user want to use MOPS as his publish/subscribe protocol, this function
+ * should be started firstly! This function is blocking itself in infinite loop,
+ * so function has to be opened in other thread (on FreeRTOS) or in separated process
+ * (on Linux devices). This function is prepared for Orocos purposes. All main task are started in separated threads so Orocos main thread is not blocked.
+ *
+ * @return 0 - in case of end of main thread.
+ */
+int StartMOPSBrokerNonBlocking(void) {
+#if TARGET_DEVICE == Linux
+	mlockall(MCL_CURRENT | MCL_FUTURE);
+#endif
+	mutex_init(&input_lock);
+	mutex_init(&output_lock);
+	mutex_init(&waiting_output_lock);
+	mutex_init(&waiting_input_lock);
+
+	InitTopicList(list);
+	MOPS_QueueInit(mops_queue);
+	SubListInit(sub_list);
+	connectToRTnet();
+	startNewThread((void*) &threadSendToRTnet, NULL);
+	startNewThread((void*) &threadRecvFromRTnet, NULL);
+	startNewThread((void*) &InitProcesConnection, NULL);
 
 	return 0;
 }
@@ -1038,8 +1069,9 @@ int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de) {
 	attr.mq_curmsgs = 0;
 
 	mq_getattr(file_de, &attr);
-	if (attr.mq_curmsgs < MAX_QUEUE_MESSAGE_NUMBER)
+	if (attr.mq_curmsgs < MAX_QUEUE_MESSAGE_NUMBER){
 		return mq_send(file_de, (char*) buffer, buffLen, 0);
+	}
 	return 0;
 }
 

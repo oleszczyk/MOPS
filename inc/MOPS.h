@@ -21,7 +21,7 @@
 /** Target on which we want to build MOPS library (Linux/RTnode). */
 #define TARGET_DEVICE Linux
 /** Maximal number of connected local processes to broker. */
-#define MAX_PROCES_CONNECTION 10
+#define MAX_PROCES_CONNECTION 100
 /** Maximal length of message broker<->process. */
 #define MAX_QUEUE_MESSAGE_SIZE 100
 /** Maximal amount of messages stored in queues broker<->process. */
@@ -37,11 +37,11 @@
 /** Broadcast address. */
 #define IPADDR     "10.255.255.255"
 /** Maximal length of MOPS topic name (max is 2^16-1).*/
-#define MAX_TOPIC_LENGTH             10
+#define MAX_TOPIC_LENGTH             30
 /** Maximal length of MOPS message (max is 2^16-1).*/
 #define MAX_MESSAGE_LENGTH			 100
 /** Maximal number of different topic names (max is 2^16-1).*/
-#define MAX_NUMBER_OF_TOPIC          8
+#define MAX_NUMBER_OF_TOPIC          100
 /** Maximal number of different subscriptions (max is 2^16-1).*/
 #define MAX_NUMBER_OF_SUBSCRIPTIONS  100
 //***************MOPS - RTnet Settings********************
@@ -152,6 +152,7 @@ int InterpretFrame(char *messageBuf, char *frameBuf, uint8_t frameLen);
 
 // ***************   Funtions for local MOPS broker   ***************//
 int StartMOPSBroker();
+int StartMOPSBrokerNonBlocking();
 void threadSendToRTnet();
 void threadRecvFromRTnet();
 
