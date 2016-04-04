@@ -1,0 +1,28 @@
+import("mops");
+import("power");
+
+loadComponent("broker", "Mops_Broker");
+broker.configure();
+broker.start();
+
+loadComponent("mops_rec", "Mops_Rec");
+mops_rec.configure();
+mops_rec.addSub("Jakis");
+mops_rec.addSub("Inny");
+mops_rec.start();
+
+loadComponent("mops_snd", "Mops_Snd");
+mops_snd.timeout = 1;
+mops_snd.topicName = "Jakis";
+mops_snd.configure();
+mops_snd.start();
+
+loadComponent("gen", "Generator");
+loadComponent("log", "Logger");
+gen.configure();
+log.configure();
+
+connectTwoPorts("gen", "outPort", "mops_snd", "inPort");
+connectTwoPorts("mops_rec", "outPort", "log", "inPort");
+gen.start();
+log.start();

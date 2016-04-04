@@ -1,0 +1,11 @@
+<package>
+    <description brief="Orocos mops Component package">
+        This package contains the components of the mops package
+    </description>
+    <!--NOTE: set the license and author before you publish this code-->
+    <license>BSD</license>
+    <author>Michal Oleszczyk</author>
+    <rosdep name="rtt" />
+    <rosdep name="orogen" />
+</package>
+
