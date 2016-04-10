@@ -2,6 +2,16 @@
 #define OROCOS_MOPS_SND_COMPONENT_HPP
 
 #include <rtt/RTT.hpp>
+#include <string>
+
+extern "C"
+{
+#include "MOPS.h"
+}
+
+struct MyData{
+  char data[MAX_MESSAGE_LENGTH];
+};
 
 class Mops_Snd : public RTT::TaskContext{
   public:
@@ -17,6 +27,6 @@ class Mops_Snd : public RTT::TaskContext{
     unsigned _cpu;
     unsigned _timeout;   // [ms]
     std::string _topicName;
-    RTT::InputPort<std::string>  _inPort;
+    RTT::InputPort<MyData>  _inPort;
 };
 #endif

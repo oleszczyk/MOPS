@@ -4,6 +4,15 @@
 #include <rtt/RTT.hpp>
 #include <string>
 
+extern "C"
+{
+#include "MOPS.h"
+}
+
+struct MyData{
+  char data[MAX_MESSAGE_LENGTH];
+};
+
 class Mops_Rec : public RTT::TaskContext{
   public:
     Mops_Rec(std::string const& name);
@@ -16,7 +25,7 @@ class Mops_Rec : public RTT::TaskContext{
     bool _verbose;
     int _priority;
     unsigned _cpu;
-    RTT::OutputPort<std::string>  _outPort;
+    RTT::OutputPort<MyData>  _outPort;
     
     void _addSub(std::string topic);
 };

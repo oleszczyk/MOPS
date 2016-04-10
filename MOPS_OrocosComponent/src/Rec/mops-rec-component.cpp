@@ -4,14 +4,8 @@
 #include <string>
 #include <list>
 
-extern "C"
-{
-#include "MOPS.h"
-}
-
 static const int         defPriority = 10;
 static const unsigned    defCpu      = 0;
-static char              array[MAX_MESSAGE_LENGTH];
 
 Mops_Rec::Mops_Rec(std::string const& name) :
   TaskContext(name, PreOperational),
@@ -62,12 +56,10 @@ bool Mops_Rec::startHook(){
   return true;
 }
 
-void Mops_Rec::updateHook(){
-  std::string msg;
-  
-  readMOPS(array, MAX_MESSAGE_LENGTH);
-  msg.append(array);
-  
+void Mops_Rec::updateHook(){ 
+  MyData msg;
+  readMOPS((char*)msg.data, MAX_MESSAGE_LENGTH);
+
   _outPort.write(msg);
   getActivity()->trigger();
   if(_verbose)

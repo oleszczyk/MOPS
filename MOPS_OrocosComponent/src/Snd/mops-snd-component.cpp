@@ -3,11 +3,6 @@
 #include <iostream>
 #include <string>
 
-extern "C"
-{
-#include "MOPS.h"
-}
-
 static const int         defPriority = 10;
 static const unsigned    defCpu      = 0;
 static const unsigned    defTimeout  = 500; // [ms]
@@ -60,11 +55,11 @@ bool Mops_Snd::startHook(){
 }
 
 void Mops_Snd::updateHook(){
-  std::string msg;
+  MyData msg;
 
   if( _inPort.read(msg)==RTT::NewData && _topicName.compare(defTopicName) )
   {
-    publishMOPS((char*)_topicName.c_str(), (char*)msg.c_str());
+    publishMOPS((char*)_topicName.c_str(), (char*)msg.data);
     getActivity()->trigger();
     if(_verbose)
       std::cout << "Mops_Snd executes updateHook !" <<std::endl;
