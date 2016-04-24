@@ -1193,7 +1193,7 @@ QueueHandle_t ServeNewProcessConnection(){
 
 	if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_MOPS_Proces, (TickType_t)100))
 		if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_Proces_MOPS, (TickType_t)100))
-			if (AddToMOPSQueue((int)new_mq_MOPS_Proces, (int)new_mq_Proces_MOPS) >= 0) {
+			if (AddToMOPSQueue( (int)new_mq_MOPS_Proces, (int)new_mq_Proces_MOPS) >= 0) {
 				//rtprintf("Nowy deskryptor: %d\r\n", new_mq_Proces_MOPS);
 				return new_mq_Proces_MOPS;
 			}
@@ -1202,6 +1202,7 @@ QueueHandle_t ServeNewProcessConnection(){
 
 void DeleteProcessFromQueueList(int ClientID, MOPS_Queue *queue) {
 //TODO
+}
 #endif //TARGET_DEVICE == RTnode
 
 
@@ -1301,7 +1302,7 @@ void PrepareFrameToSendToProcess(uint8_t *Buffer, int written_bytes) {
 	for (i = 0; i < MAX_PROCES_CONNECTION; i++)
 		if (clientID[i] != -1)
 			SendToProcess(tempBuffer, written_bytes + topicLen,
-					(int)mops_queue[clientID[i]].MOPSToProces_fd);
+					(int) mops_queue[clientID[i]].MOPSToProces_fd);
 }
 
 /**
