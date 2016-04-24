@@ -959,8 +959,13 @@ int AddToMOPSQueue(int MOPS_Proces_fd, int Proces_MOPS_fd) {
 	for (i = 0; i < MAX_PROCES_CONNECTION; i++)
 		if (mops_queue[i].MOPSToProces_fd == 0
 				&& mops_queue[i].ProcesToMOPS_fd == 0) {
-			mops_queue[i].MOPSToProces_fd = (void*)MOPS_Proces_fd;
-			mops_queue[i].ProcesToMOPS_fd = (void*)Proces_MOPS_fd;
+#if TARGET_DEVICE == Linux
+			mops_queue[i].MOPSToProces_fd = MOPS_Proces_fd;
+			mops_queue[i].ProcesToMOPS_fd = Proces_MOPS_fd;
+#else
+			mops_queue[i].MOPSToProces_fd = (void*)&MOPS_Proces_fd;
+			mops_queue[i].ProcesToMOPS_fd = (void*)&Proces_MOPS_fd;
+#endif
 			return i;
 		}
 	return -1;
@@ -1600,3 +1605,4 @@ uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB) {
 	temp += LSB;
 	return temp;
 }
+
