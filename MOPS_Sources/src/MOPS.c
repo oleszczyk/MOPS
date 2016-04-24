@@ -959,8 +959,8 @@ int AddToMOPSQueue(int MOPS_Proces_fd, int Proces_MOPS_fd) {
 	for (i = 0; i < MAX_PROCES_CONNECTION; i++)
 		if (mops_queue[i].MOPSToProces_fd == 0
 				&& mops_queue[i].ProcesToMOPS_fd == 0) {
-			mops_queue[i].MOPSToProces_fd = MOPS_Proces_fd;
-			mops_queue[i].ProcesToMOPS_fd = Proces_MOPS_fd;
+			mops_queue[i].MOPSToProces_fd = (void*)MOPS_Proces_fd;
+			mops_queue[i].ProcesToMOPS_fd = (void*)Proces_MOPS_fd;
 			return i;
 		}
 	return -1;
@@ -1156,7 +1156,7 @@ void InitProcesConnection() {
 				new_mq_Proces_MOPS = ServeNewProcessConnection();
 				xQueueAddToSet( new_mq_Proces_MOPS, master );
 			} else {
-				ReceiveFromProcess(xActivatedMember);
+				ReceiveFromProcess((int)xActivatedMember);
 			}
 		}
 		if (xActivatedMember == NULL){ // timeout, we can do our things
@@ -1188,12 +1188,15 @@ QueueHandle_t ServeNewProcessConnection(){
 
 	if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_MOPS_Proces, (TickType_t)100))
 		if( xQueueReceive(GlobalProcesMopsQueue, &new_mq_Proces_MOPS, (TickType_t)100))
-			if (AddToMOPSQueue(new_mq_MOPS_Proces, new_mq_Proces_MOPS) >= 0) {
+			if (AddToMOPSQueue((int)new_mq_MOPS_Proces, (int)new_mq_Proces_MOPS) >= 0) {
 				//rtprintf("Nowy deskryptor: %d\r\n", new_mq_Proces_MOPS);
 				return new_mq_Proces_MOPS;
 			}
-	return -1;
+	return (QueueHandle_t) -1;
 }
+
+void DeleteProcessFromQueueList(int ClientID, MOPS_Queue *queue) {
+//TODO
 #endif //TARGET_DEVICE == RTnode
 
 
@@ -1293,7 +1296,7 @@ void PrepareFrameToSendToProcess(uint8_t *Buffer, int written_bytes) {
 	for (i = 0; i < MAX_PROCES_CONNECTION; i++)
 		if (clientID[i] != -1)
 			SendToProcess(tempBuffer, written_bytes + topicLen,
-					mops_queue[clientID[i]].MOPSToProces_fd);
+					(int)mops_queue[clientID[i]].MOPSToProces_fd);
 }
 
 /**
@@ -1337,8 +1340,8 @@ void FindClientsIDbyTopic(int *clientsID, uint8_t *topic, uint16_t topicLen) {
 int FindClientIDbyFileDesc(int file_de) {
 	int i = 0;
 	for (i = 0; i < MAX_NUMBER_OF_SUBSCRIPTIONS; i++)
-		if (mops_queue[i].MOPSToProces_fd == file_de
-				|| mops_queue[i].ProcesToMOPS_fd == file_de)
+		if ((int)mops_queue[i].MOPSToProces_fd == file_de
+				|| (int)mops_queue[i].ProcesToMOPS_fd == file_de)
 			return i;
 	return -1;
 }

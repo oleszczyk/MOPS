@@ -14,11 +14,11 @@
 #include "MQTT.h"
 #include "MQTTConf.h"
 
-#if TARGET_DEVICE == Linux
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#endif //TARGET_DEVICE == Linux
+
+
 #if TARGET_DEVICE == RTnode
 #include <strings.h>
 #include <timers.h>
