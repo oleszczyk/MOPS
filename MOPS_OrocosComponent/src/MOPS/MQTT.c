@@ -232,12 +232,13 @@ uint16_t BuildConnACKMessage(uint8_t *Buffer, int BufferLen, uint8_t SessionPres
  * @param[in] BufferLen Maximum length of given buffer.
  * @param[in] Topic String containing topic name
  * @param[in] Message String containing message payload.
+ * @param[in] MessageLen Length of message in bytes.
  * @param[in] DUP Duplicate flag value.
  * @param[in] Retain Retain flag value.
  * @param[out] packetID Value describing packet identification number of prepared frame.
  * @return Length of applied bytes into given buffer.
  */
-uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topic, uint8_t* Message, uint8_t DUP, uint8_t Retain, uint16_t *packetID){
+uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topic, uint8_t* Message, uint16_t MessageLen, uint8_t DUP, uint8_t Retain, uint16_t *packetID){
 	FixedHeader FHeader;
 	PublishVariableHeader PVHeader;
 	uint8_t MSB_temp, LSB_temp, Flags = 0;
@@ -249,7 +250,7 @@ uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topi
 	Flags = (DUP<<3) + (QOS<<1) + Retain;
 
 	//Check if all data can be stored in Message buffer
-	tempLen += sizeof(FHeader) + 2 + strlen((char*)Topic) + 2 +strlen((char*)Message);
+	tempLen += sizeof(FHeader) + 2 + strlen((char*)Topic) + 2 + MessageLen;
 	if( QOS > 0)
 		tempLen += 2;
 	if (tempLen > BufferLen)
@@ -286,7 +287,7 @@ uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topi
 	}
 
 	//**** Payload part *****//
-	tempLen = strlen((char*)Message);
+	tempLen = MessageLen;
 	u16ToMSBandLSB(tempLen, &MSB_temp, &LSB_temp);
 	Buffer[index] = MSB_temp;
 	Buffer[index+1] = LSB_temp;

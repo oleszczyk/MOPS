@@ -215,7 +215,7 @@ uint16_t BuildConnACKMessage(uint8_t *Buffer, int BufferLen, uint8_t SessionPres
 
 //Definitions for PUBLISH packet
 void Init_TopicName(TopicName *TName, uint8_t *Topic);
-uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topic, uint8_t* Message, uint8_t DUP, uint8_t Retain, uint16_t *packetID);
+uint16_t BuildClientPublishMessage(uint8_t *Buffer, int BufferLen, uint8_t* Topic, uint8_t* Message, uint16_t MessageLen, uint8_t DUP, uint8_t Retain, uint16_t *packetID);
 uint16_t BuildPubACKMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID);
 uint16_t BuildPubRecMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID);
 uint16_t BuildPubRelMessage(uint8_t *Buffer, int BufferLen, uint16_t packetID);

@@ -212,14 +212,15 @@ int recvFromMOPS(char *buffer, uint16_t buffLen) {
  * @brief Publishing specified message under specified topic (user interface function).
  *
  * @param[in] Topic Message topic name (as a string).
- * @param[in] Message Message payload (as a string).
+ * @param[in] Message Message payload.
+ * @param[in] MessageLen Length of message in bytes.
  */
-void publishMOPS(char *Topic, char *Message) {
+void publishMOPS(char *Topic, char *Message, int MessageLen) {
 	char buffer[MAX_QUEUE_MESSAGE_SIZE+1];
 	memset(buffer, 0, MAX_QUEUE_MESSAGE_SIZE+1);
 	uint16_t packetID, written;
 	written = BuildClientPublishMessage((uint8_t*) buffer, sizeof(buffer),
-			(uint8_t*) Topic, (uint8_t*) Message, 0, 0, &packetID);
+			(uint8_t*) Topic, (uint8_t*) Message, (uint16_t) MessageLen,  0, 0, &packetID);
 	if (sendToMOPS(buffer, written) == -1) {
 		perror("send");
 	}
@@ -1606,4 +1607,3 @@ uint16_t MSBandLSBTou16(uint8_t MSB, uint8_t LSB) {
 	temp += LSB;
 	return temp;
 }
-

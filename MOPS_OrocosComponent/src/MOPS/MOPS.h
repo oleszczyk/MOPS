@@ -144,7 +144,7 @@ int connectToMOPS();
 int sendToMOPS(char *buffer, uint16_t buffLen);
 int recvFromMOPS(char *buffer, uint16_t buffLen);
 
-void publishMOPS(char *Topic, char *Message);
+void publishMOPS(char *Topic, char *Message, int MessageLen);
 void subscribeMOPS(char **TopicList, uint8_t *QosList, uint8_t NoOfTopics);
 int readMOPS(char *buf, uint8_t length);
 int InterpretFrame(char *messageBuf, char *frameBuf, uint8_t frameLen);
