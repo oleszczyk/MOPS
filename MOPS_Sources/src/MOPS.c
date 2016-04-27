@@ -1124,8 +1124,7 @@ int ServeNewProcessConnection(fd_set *set, int listener_fd) {
 
 		if (AddToMOPSQueue(new_mq_MOPS_Proces, new_mq_Proces_MOPS) >= 0) {
 			FD_SET(new_mq_Proces_MOPS, set);
-			//printf("Nowy deskryptor: %d, nazwa kolejki: %s \n",
-					new_mq_Proces_MOPS, buffer);
+			//printf("Nowy deskryptor: %d, nazwa kolejki: %s \n", new_mq_Proces_MOPS, buffer);
 			return new_mq_Proces_MOPS;
 		}
 	}
