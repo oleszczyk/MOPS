@@ -102,6 +102,7 @@ int connectToMOPS(void) {
 	attr.mq_maxmsg = MAX_QUEUE_MESSAGE_NUMBER;
 	attr.mq_msgsize = MAX_QUEUE_MESSAGE_SIZE;
 	attr.mq_curmsgs = 0;
+	srand ( time(NULL) );
 	sprintf(buffer + 1, "%d", rand()%100000);
 
 	mq = mq_open(QUEUE_NAME, O_WRONLY);
