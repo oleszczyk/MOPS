@@ -161,6 +161,14 @@ int recvFromMOPS(char *buffer, uint16_t buffLen) {
 #endif //TARGET_DEVICE == Linux
 
 #if TARGET_DEVICE == RTnode
+/**
+ * @brief Function used in local processes to connect to the MOPS broker.
+ *
+ * For RTnode target communication MOPS uses MQueues library but for RTnode -
+ * Queue Management mechanism (user interface function).
+ *
+ * @return 0 - if connection succeed, 1 - if there was a problem with connection.
+ */
 int connectToMOPS() {
 
 	while(xRTnetWaitRedy(portMAX_DELAY) == pdFAIL){;}
@@ -328,7 +336,6 @@ int StartMOPSBroker(void) {
 	startNewThread((void*) &threadSendToRTnet, NULL);
 	startNewThread((void*) &threadRecvFromRTnet, NULL);
 	InitProcesConnection();
-
 	return 0;
 }
 
@@ -490,8 +497,10 @@ void threadSendToRTnet() {
 			SendTopicList(list);
 			break;
 		}
+
 		lock_mutex(&output_lock);
 		if ((output_index > sizeof(MOPSHeader))	|| (output_buffer[0] == TOPIC_REQUEST)) {
+			/* loop-back mechanism */
 			lock_mutex(&input_lock);
 			memcpy(input_buffer, output_buffer, output_index);
 			input_index = output_index;
@@ -499,7 +508,7 @@ void threadSendToRTnet() {
 			memset(input_buffer, 0, UDP_MAX_SIZE);
 			input_index = 0;
 			unlock_mutex(&input_lock);
-
+			/* loop-back mechanism end */
 			sendToRTnet(output_buffer, output_index);
 		}
 		MOPS_State = SEND_NOTHING;
@@ -933,12 +942,14 @@ void UpdateTopicList(uint8_t *Buffer, int BufferLen) {
 		err = AddTopicToList(list, Buffer + index, tempTopicLength,
 				tempTopicID);
 		index += tempTopicLength;
+		/*
 		if (err == 1)
 			printf("Brak miejsca na liscie! \n");
 		if (err == 0)
 			printf("Dodalem, id: %d \n", tempTopicID);
 		if (err == 2)
 			printf("Topic, id: %d, juz istnieje. \n", tempTopicID);
+		*/
 	}
 }
 
@@ -1113,7 +1124,7 @@ int ServeNewProcessConnection(fd_set *set, int listener_fd) {
 
 		if (AddToMOPSQueue(new_mq_MOPS_Proces, new_mq_Proces_MOPS) >= 0) {
 			FD_SET(new_mq_Proces_MOPS, set);
-			printf("Nowy deskryptor: %d, nazwa kolejki: %s \n",
+			//printf("Nowy deskryptor: %d, nazwa kolejki: %s \n",
 					new_mq_Proces_MOPS, buffer);
 			return new_mq_Proces_MOPS;
 		}
@@ -1144,6 +1155,16 @@ void DeleteProcessFromQueueList(int ClientID, MOPS_Queue *queue) {
 
 //TODO
 #if TARGET_DEVICE == RTnode
+/**
+ * @brief Main function for setting processes<->broker communication.
+ *
+ * This is place where initial queue processes->broker is created.
+ * Broker is listening on this queue and is adding new connections to his
+ * 'communication list'. Functionality is based on select(). Function
+ * is target sensitive.
+ *
+ * @post This is blocking function (never ending loop)!
+ */
 void InitProcesConnection() {
 
 	QueueHandle_t new_mq_Proces_MOPS;
@@ -1156,7 +1177,7 @@ void InitProcesConnection() {
 	xQueueAddToSet( GlobalProcesMopsQueue, master );
 	//rtprintf("gotowe. \r\n");
 	while(1) {
-		xActivatedMember = xQueueSelectFromSet( master, 10);
+		xActivatedMember = xQueueSelectFromSet( master, 1);
 		if (xActivatedMember != NULL) { // there are file descriptors to serve
 			if (xActivatedMember == GlobalProcesMopsQueue) {
 				//rtprintf("Mam cos z globalne kolejki. \r\n");
@@ -1172,6 +1193,15 @@ void InitProcesConnection() {
 	}
 }
 
+/**
+ * @brief Receiving data from connected local processes.
+ *
+ * This is high level function used for react when select() function
+ * return that file descriptor (file_de variable) if ready to read some data.
+ *
+ * @param[in] file_de File descriptor of queue from which data can be read.
+ * @return 0 - in every case (still TODO).
+ */
 int ReceiveFromProcess(int file_de) {
 	int ClientID;
 	uint8_t temp[MAX_QUEUE_MESSAGE_SIZE + 1];
@@ -1184,12 +1214,33 @@ int ReceiveFromProcess(int file_de) {
 	return 0;
 }
 
+/**
+ * @brief Sending data from broker to particular file descriptor.
+ *
+ * Function sends buffer of given length to given file descriptor.
+ * This is very low level function. It is target sensitive.
+ *
+ * @param[in] buffer Buffer of data to send.
+ * @param[in] buffLen Buffer length.
+ * @param[in] file_de File descriptor, place where data should be sent.
+ * @return Number of bytes properly sent.\n
+ * 0 - if queue is full
+ */
 int SendToProcess(uint8_t *buffer, uint16_t buffLen, int file_de) {
 	if ( xQueueSend(file_de, buffer, 0) == pdTRUE  )
 		return MAX_QUEUE_MESSAGE_SIZE;
 	return 0;
 }
 
+/**
+ * @brief Main place where new connection from processes to broker are serve.
+ *
+ * Function is fired when file descriptors on which broker is listening new
+ * connections is set.
+ *
+ * @return File descriptor value - when there is place in MOPSQueue array ('connection list')\n
+ * 	-1 - if there is no place in MOPSQueue array or no message received from listener_fd
+ */
 QueueHandle_t ServeNewProcessConnection(){
 	QueueHandle_t new_mq_Proces_MOPS, new_mq_MOPS_Proces;
 
@@ -1202,6 +1253,17 @@ QueueHandle_t ServeNewProcessConnection(){
 	return (QueueHandle_t) -1;
 }
 
+/**
+ * @brief Deleting not needed anymore connections from 'connection list'.
+ *
+ * File descriptors stored in 'connection list' are erased (set to 0) for
+ * given client.
+ *
+ * @param[in] ClientID ID of client for which connection should be closed.
+ * @param[out] queue List of communication structure where particular
+ * communication was stored.
+ * @post One more free space in 'communication list'.
+ */
 void DeleteProcessFromQueueList(int ClientID, MOPS_Queue *queue) {
 //TODO
 }

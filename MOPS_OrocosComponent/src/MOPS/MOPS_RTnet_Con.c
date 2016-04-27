@@ -167,11 +167,30 @@ static xRTnetSockAddr_t sd_addr_b;/**< Struct containing socket address for send
 xRTnetSocket_t get_sock; /**< Socket for receiving packet from RTnet. */
 xRTnetSocket_t bcast_sock; /**< Socket for broadcasting packets to RTnet. */
 
+/**
+ * @brief Enable starting of some function in separated thread.
+ * @param start_routine Pointer to a function which will be  started as a new thread.
+ * @param arg Pointer to a struct containing arguments for function which will be started.
+ * @return ID of new thread.
+ *
+ * @post New thread has been started.
+ */
 void startNewThread(void *(*start_routine) (void *), void *arg){
 	TaskHandle_t xHandle = NULL;
 	xTaskCreate( (*start_routine), NULL, 400, arg, 3, &xHandle );
 }
 
+/**
+ *	@brief	Setting all required variable for connection.
+ *
+ *	Function sets global variables responsible for Ethernet communication
+ *	(rec_addr, sd_addr_b, sd_addr_l). Moreover here two sockets are created:
+ *	get_sock, bcast_sock. First one is for listening incoming pockets, second
+ *	one is used for outgoing transfer.
+ *
+ *	@pre	Nothing.
+ *	@post	Changing values of globla variables: rec_addr, sd_addr_b, sd_addr_l, get_sock, bcast_sock.
+ */
 void connectToRTnet(){
     uint8_t  macBroadcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     uint32_t ip;
@@ -190,6 +209,7 @@ void connectToRTnet(){
     if ((get_sock = xRTnetSocket(RTNET_AF_INET, RTNET_SOCK_DGRAM, RTNET_IPPROTO_UDP)) == NULL)
         vTaskSuspend(NULL);
 
+    xRTnetSetsockopt(bcast_sock, 0, RTNET_SO_TXTIMEOUT, (void  *) 1, 0);
     rec_addr.sin_port = rtnet_htons(MOPS_PORT);
     rec_addr.sin_addr =  rtnet_htonl(0x00000000UL);//inet_addr("10.0.0.0");
 
@@ -206,14 +226,30 @@ void connectToRTnet(){
 	rtprintf("Podlaczony, niby\r\n");
 }
 
+/**
+ * @brief	Sending buffer to RTnet.
+ * @param buf	This a buffer containing data which should be send to other MOPS brokers.
+ * @param buflen	Length of buffer in bytes for sending.
+ *
+ * @pre	Nothing.
+ * @post Data are send as a broadcast UDP frame into RTnet and also to myself.
+ */
 void sendToRTnet(uint8_t *buf, int buflen){
 	int write = 0;
-	uint32_t len1 = sizeof(sd_addr_b);
+	uint32_t len = sizeof(sd_addr_b);
 
-    if( (write = lRTnetSendto(bcast_sock, buf, buflen, 0, &sd_addr_b, len1)) <= 0 )
-        rtprintf("error: sendto");
+    if( (write = lRTnetSendto(bcast_sock, buf, buflen, 0, &sd_addr_b, len)) <= 0 )
+        rtprintf("error: sendto = %d \r\n", write);
 }
 
+/**
+ * @brief	Receiving data from RTnet.
+ * @param buf Destination where received data will be stored.
+ * @param buflen Maximum length of buffer (in bytes) which can be overridden.
+ * @return Actual number of overridden bytes in buffer (amount of written bytes).
+ *
+ * @post buf variable has been filled with incoming data.
+ */
 int receiveFromRTnet(uint8_t *buf, int buflen){
 	int written = 0;
 	uint32_t len = sizeof(rec_addr);
@@ -226,6 +262,13 @@ int receiveFromRTnet(uint8_t *buf, int buflen){
 	return written;
 }
 
+/**
+ * @brief Initiation o mutex.
+ * @param lock Pointer to mutex we want to be initiated.
+ * @return 1 if initiation failed, 0 if everything goes fine.
+ *
+ * @post Pointed mutex if ready to use.
+ */
 uint8_t mutex_init(SemaphoreHandle_t *lock){
 	*lock = xSemaphoreCreateMutex();
 	if( *lock == NULL )
@@ -233,10 +276,25 @@ uint8_t mutex_init(SemaphoreHandle_t *lock){
     return 0;
 }
 
+/**
+ * @brief Locking mutex.
+ * @param lock Pointer to mutex we want to locked.
+ *
+ * @post Pointed mutex is locked.
+ */
 void lock_mutex(SemaphoreHandle_t *lock){
-	while( xSemaphoreTake( *lock, ( TickType_t ) 0 ) != pdTRUE )
-	{;}
+	while( xSemaphoreTake( *lock, ( TickType_t ) 30 ) != pdTRUE )
+	{
+		//rtprintf("Zablokowany...\r\n");
+	}
 }
+
+/**
+ * @brief Unlocking mutex.
+ * @param lock Pointer to mutex we want to unlock.
+ *
+ * @post Pointed mutex is unlocked and ready for reuse.
+ */
 void unlock_mutex(SemaphoreHandle_t *lock){
 	xSemaphoreGive( *lock );
 }
